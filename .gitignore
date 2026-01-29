@@ -1,0 +1,11 @@
+# Snapshot received files (pending approval)
+*.received
+
+# Elm artifacts
+elm-stuff/
+
+# Node
+node_modules/
+
+# elm-pages
+.elm-pages/
