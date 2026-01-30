@@ -1,4 +1,4 @@
-module Snapshot.Printer exposing (Printer, json, string)
+module Snapshot.Printer exposing (Printer, json, string, withExtension)
 
 {-| Printers convert domain objects to strings for snapshot comparison.
 
@@ -22,30 +22,45 @@ The printer's job is to create a human-readable, diffable representation.
 
 @docs string, json
 
+
+# Customization
+
+@docs withExtension
+
 -}
 
 import Json.Decode as Decode
 import Json.Encode as Encode
 
 
-{-| A printer converts a value of type `a` to a String.
+{-| A printer converts a value of type `a` to a String and specifies
+the file extension for syntax highlighting in diff tools.
+
+The extension is used to generate snapshot filenames like:
+
+    test_name.approved.json
+    test_name.received.txt
+
 -}
 type alias Printer a =
-    a -> String
+    { extension : String
+    , print : a -> String
+    }
 
 
-{-| Identity printer - use when your test already returns a String.
+{-| Identity printer for string output.
 
     Snapshot.expect Printer.string "log output" <|
         \() -> formatLog entry
 
-Most of the time you'll use `Snapshot.test` directly for string output.
-Use `Printer.string` with `Snapshot.expect` when you want to be explicit.
+Produces `.txt` files by default.
 
 -}
 string : Printer String
 string =
-    identity
+    { extension = "txt"
+    , print = identity
+    }
 
 
 {-| JSON pretty-printer with sorted keys and configurable indentation.
@@ -65,12 +80,33 @@ Use 2 or 4 for readable output with short lines.
 output. This matches the behavior of Go's `json.Marshal` and Jest's
 `pretty-format` - the modern consensus for testing tools.
 
+Produces `.json` files for syntax highlighting in diff tools.
+
 -}
 json : Int -> Printer Encode.Value
-json indent value =
-    value
-        |> sortJsonKeys
-        |> Encode.encode indent
+json indent =
+    { extension = "json"
+    , print =
+        \value ->
+            value
+                |> sortJsonKeys
+                |> Encode.encode indent
+    }
+
+
+{-| Change the file extension of a printer.
+
+    xmlPrinter : Printer String
+    xmlPrinter =
+        Printer.string
+            |> Printer.withExtension "xml"
+
+Useful when the content type doesn't match the default extension.
+
+-}
+withExtension : String -> Printer a -> Printer a
+withExtension ext printer =
+    { printer | extension = ext }
 
 
 {-| Recursively sort all object keys in a JSON value.

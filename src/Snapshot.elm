@@ -64,8 +64,8 @@ Group related tests using `describe`.
 
 -}
 type Test
-    = PureTest String (List Scrubber) (() -> String)
-    | TaskTest String (List Scrubber) (BackendTask FatalError String)
+    = PureTest String String (List Scrubber) (() -> String)
+    | TaskTest String String (List Scrubber) (BackendTask FatalError String)
     | Describe String (List Test)
 
 
@@ -80,7 +80,7 @@ This is the most common form - use when your function already returns a String.
 -}
 test : String -> (() -> String) -> Test
 test name fn =
-    PureTest name [] fn
+    PureTest name "txt" [] fn
 
 
 {-| Create a snapshot test for JSON values with pretty printing.
@@ -95,7 +95,11 @@ Keys are sorted alphabetically for deterministic output.
 -}
 json : Int -> String -> (() -> Encode.Value) -> Test
 json indent name fn =
-    PureTest name [] (\() -> Printer.json indent (fn ()))
+    let
+        printer =
+            Printer.json indent
+    in
+    PureTest name printer.extension [] (\() -> printer.print (fn ()))
 
 
 {-| Create a snapshot test with a custom printer.
@@ -109,7 +113,7 @@ Use this when you need a custom `a -> String` conversion.
 -}
 expect : Printer a -> String -> (() -> a) -> Test
 expect printer name fn =
-    PureTest name [] (\() -> printer (fn ()))
+    PureTest name printer.extension [] (\() -> printer.print (fn ()))
 
 
 {-| Add scrubbers to a test for non-deterministic output.
@@ -127,11 +131,11 @@ and GUIDs with stable placeholders.
 withScrubbers : List Scrubber -> Test -> Test
 withScrubbers scrubbers testCase =
     case testCase of
-        PureTest name existingScrubbers fn ->
-            PureTest name (existingScrubbers ++ scrubbers) fn
+        PureTest name ext existingScrubbers fn ->
+            PureTest name ext (existingScrubbers ++ scrubbers) fn
 
-        TaskTest name existingScrubbers task ->
-            TaskTest name (existingScrubbers ++ scrubbers) task
+        TaskTest name ext existingScrubbers task ->
+            TaskTest name ext (existingScrubbers ++ scrubbers) task
 
         Describe name tests ->
             Describe name (List.map (withScrubbers scrubbers) tests)
@@ -166,7 +170,7 @@ Use this for tests that need IO (file reading, HTTP, etc).
 -}
 taskTest : String -> BackendTask FatalError String -> Test
 taskTest name task =
-    TaskTest name [] task
+    TaskTest name "txt" [] task
 
 
 {-| Create a BackendTask-powered snapshot test for JSON values.
@@ -178,7 +182,11 @@ taskTest name task =
 -}
 taskJson : Int -> String -> BackendTask FatalError Encode.Value -> Test
 taskJson indent name task =
-    TaskTest name [] (BackendTask.map (Printer.json indent) task)
+    let
+        printer =
+            Printer.json indent
+    in
+    TaskTest name printer.extension [] (BackendTask.map printer.print task)
 
 
 {-| Create a BackendTask-powered snapshot test with a custom printer.
@@ -190,11 +198,12 @@ taskJson indent name task =
 -}
 taskExpect : Printer a -> String -> BackendTask FatalError a -> Test
 taskExpect printer name task =
-    TaskTest name [] (BackendTask.map printer task)
+    TaskTest name printer.extension [] (BackendTask.map printer.print task)
 
 
 type alias TestResult =
     { name : String
+    , extension : String
     , outcome : Outcome
     }
 
@@ -309,25 +318,59 @@ findDuplicates names =
 findObsoleteSnapshots : String -> List String -> BackendTask FatalError (List String)
 findObsoleteSnapshots scriptName testNames =
     let
-        expectedPaths =
+        -- Build set of expected base paths (without extension)
+        expectedBasePaths =
             testNames
-                |> List.map (\name -> snapshotPath scriptName name ".approved")
+                |> List.map (snapshotBasePath scriptName)
                 |> Set.fromList
 
         snapshotDir =
             "snapshots/" ++ sanitizeName scriptName ++ "/"
+
+        -- Extract base path from a full file path (remove .approved.ext or .received.ext)
+        getBasePath : String -> String
+        getBasePath path =
+            path
+                |> String.replace ".approved" ""
+                |> (\p ->
+                        -- Remove the file extension (e.g., .json, .txt)
+                        case String.split "." p |> List.reverse of
+                            _ :: rest ->
+                                rest |> List.reverse |> String.join "."
+
+                            [] ->
+                                p
+                   )
     in
     Glob.succeed identity
         |> Glob.captureFilePath
         |> Glob.match (Glob.literal snapshotDir)
         |> Glob.match Glob.recursiveWildcard
-        |> Glob.match (Glob.literal ".approved")
+        |> Glob.match (Glob.literal ".approved.")
+        |> Glob.match Glob.wildcard
         |> Glob.toBackendTask
         |> BackendTask.map
             (\approvedFiles ->
                 approvedFiles
-                    |> List.filter (\path -> not (Set.member path expectedPaths))
+                    |> List.filter (\path -> not (Set.member (getBasePath path) expectedBasePaths))
             )
+
+
+{-| Get the base snapshot path without status or content extension.
+-}
+snapshotBasePath : String -> String -> String
+snapshotBasePath scriptName testName =
+    let
+        segments =
+            String.split " / " testName
+
+        sanitizedSegments =
+            List.map sanitizeName segments
+
+        relativePath =
+            String.join "/" sanitizedSegments
+    in
+    "snapshots/" ++ sanitizeName scriptName ++ "/" ++ relativePath
 
 
 {-| Find .approved files that exist but aren't tracked by git.
@@ -338,7 +381,7 @@ findUntrackedSnapshots scriptName _ =
         snapshotDir =
             "snapshots/" ++ sanitizeName scriptName ++ "/"
     in
-    -- Use git ls-files to find untracked .approved files
+    -- Use git ls-files to find untracked .approved.* files
     Stream.commandWithOptions
         (Stream.defaultCommandOptions |> Stream.allowNon0Status)
         "git"
@@ -349,7 +392,7 @@ findUntrackedSnapshots scriptName _ =
                 result.body
                     |> String.trim
                     |> String.lines
-                    |> List.filter (\line -> String.endsWith ".approved" line && not (String.isEmpty line))
+                    |> List.filter (\line -> String.contains ".approved." line && not (String.isEmpty line))
             )
         |> BackendTask.onError (\_ -> BackendTask.succeed [])
 
@@ -359,15 +402,17 @@ findUntrackedSnapshots scriptName _ =
 flattenTest : String -> Test -> List FlatTest
 flattenTest prefix testCase =
     case testCase of
-        PureTest name scrubbers fn ->
+        PureTest name ext scrubbers fn ->
             [ { name = prefixName prefix name
+              , extension = ext
               , scrubbers = scrubbers
               , task = BackendTask.succeed (fn ())
               }
             ]
 
-        TaskTest name scrubbers task ->
+        TaskTest name ext scrubbers task ->
             [ { name = prefixName prefix name
+              , extension = ext
               , scrubbers = scrubbers
               , task = task
               }
@@ -392,6 +437,7 @@ prefixName prefix name =
 
 type alias FlatTest =
     { name : String
+    , extension : String
     , scrubbers : List Scrubber
     , task : BackendTask FatalError String
     }
@@ -446,17 +492,17 @@ program =
 
 runFlatTest : String -> CliOptions -> FlatTest -> BackendTask FatalError TestResult
 runFlatTest scriptName options flatTest =
-    runTestWithReceived scriptName options flatTest.name flatTest.scrubbers flatTest.task
+    runTestWithReceived scriptName options flatTest.name flatTest.extension flatTest.scrubbers flatTest.task
 
 
-runTestWithReceived : String -> CliOptions -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
-runTestWithReceived scriptName options name scrubbers receivedTask =
+runTestWithReceived : String -> CliOptions -> String -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
+runTestWithReceived scriptName options name extension scrubbers receivedTask =
     let
         approvedPath =
-            snapshotPath scriptName name ".approved"
+            snapshotPath scriptName name ".approved" extension
 
         receivedPath =
-            snapshotPath scriptName name ".received"
+            snapshotPath scriptName name ".received" extension
 
         shouldApprove =
             case options.approve of
@@ -492,6 +538,7 @@ runTestWithReceived scriptName options name scrubbers receivedTask =
                                             |> BackendTask.map
                                                 (\_ ->
                                                     { name = name
+                                                    , extension = extension
                                                     , outcome = Approved
                                                     }
                                                 )
@@ -501,6 +548,7 @@ runTestWithReceived scriptName options name scrubbers receivedTask =
                                             |> BackendTask.map
                                                 (\_ ->
                                                     { name = name
+                                                    , extension = extension
                                                     , outcome = FailNew received
                                                     }
                                                 )
@@ -509,6 +557,7 @@ runTestWithReceived scriptName options name scrubbers receivedTask =
                                     if received == approved then
                                         BackendTask.succeed
                                             { name = name
+                                            , extension = extension
                                             , outcome = Pass
                                             }
 
@@ -521,6 +570,7 @@ runTestWithReceived scriptName options name scrubbers receivedTask =
                                             |> BackendTask.map
                                                 (\_ ->
                                                     { name = name
+                                                    , extension = extension
                                                     , outcome = Approved
                                                     }
                                                 )
@@ -530,6 +580,7 @@ runTestWithReceived scriptName options name scrubbers receivedTask =
                                             |> BackendTask.map
                                                 (\_ ->
                                                     { name = name
+                                                    , extension = extension
                                                     , outcome =
                                                         FailMismatch
                                                             { expected = approved
@@ -564,8 +615,8 @@ deleteReceivedFile path =
     BackendTask.succeed ()
 
 
-snapshotPath : String -> String -> String -> String
-snapshotPath scriptName testName extension =
+snapshotPath : String -> String -> String -> String -> String
+snapshotPath scriptName testName statusExtension contentExtension =
     let
         -- Split on " / " to get path segments from describe blocks
         segments =
@@ -579,7 +630,7 @@ snapshotPath scriptName testName extension =
         relativePath =
             String.join "/" sanitizedSegments
     in
-    "snapshots/" ++ sanitizeName scriptName ++ "/" ++ relativePath ++ extension
+    "snapshots/" ++ sanitizeName scriptName ++ "/" ++ relativePath ++ statusExtension ++ "." ++ contentExtension
 
 
 sanitizeName : String -> String
@@ -738,18 +789,18 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
                                     FailMismatch _ ->
                                         Just
                                             (openDiffTool reporterName
-                                                ( snapshotPath scriptName result.name ".approved"
-                                                , snapshotPath scriptName result.name ".received"
+                                                ( snapshotPath scriptName result.name ".approved" result.extension
+                                                , snapshotPath scriptName result.name ".received" result.extension
                                                 )
                                             )
 
                                     FailNew _ ->
                                         let
                                             approvedPath =
-                                                snapshotPath scriptName result.name ".approved"
+                                                snapshotPath scriptName result.name ".approved" result.extension
 
                                             receivedPath =
-                                                snapshotPath scriptName result.name ".received"
+                                                snapshotPath scriptName result.name ".received" result.extension
                                         in
                                         -- Create empty .approved file first so diff tool has something to compare against
                                         Just
@@ -785,13 +836,16 @@ openDiffTool : String -> ( String, String ) -> BackendTask FatalError ()
 openDiffTool reporter ( approvedPath, receivedPath ) =
     case reporter of
         "code" ->
-            Script.exec "code" [ "--diff", approvedPath, receivedPath ]
+            Script.exec "code" [ "--diff", "--wait", approvedPath, receivedPath ]
 
         "opendiff" ->
-            Script.exec "opendiff" [ approvedPath, receivedPath ]
+            Script.exec "opendiff" [ "-W", approvedPath, receivedPath ]
 
         "meld" ->
             Script.exec "meld" [ approvedPath, receivedPath ]
+
+        "ksdiff" ->
+            Script.exec "ksdiff" [ "--wait", approvedPath, receivedPath ]
 
         "kdiff3" ->
             Script.exec "kdiff3" [ approvedPath, receivedPath ]
@@ -856,9 +910,9 @@ formatResult scriptName options result =
                     ++ indentBlock (green received)
                     ++ "\n\n  To approve this snapshot, run with:\n    --approve"
                     ++ "\n\n  Or manually:\n    mv "
-                    ++ snapshotPath scriptName result.name ".received"
+                    ++ snapshotPath scriptName result.name ".received" result.extension
                     ++ " "
-                    ++ snapshotPath scriptName result.name ".approved"
+                    ++ snapshotPath scriptName result.name ".approved" result.extension
 
         FailMismatch { expected, received } ->
             if options.ci then
@@ -872,9 +926,9 @@ formatResult scriptName options result =
                     ++ formatDiff expected received
                     ++ "\n\n  To approve this change, run with:\n    --approve"
                     ++ "\n\n  Or manually:\n    mv "
-                    ++ snapshotPath scriptName result.name ".received"
+                    ++ snapshotPath scriptName result.name ".received" result.extension
                     ++ " "
-                    ++ snapshotPath scriptName result.name ".approved"
+                    ++ snapshotPath scriptName result.name ".approved" result.extension
 
 
 formatDiff : String -> String -> String

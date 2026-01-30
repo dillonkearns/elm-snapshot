@@ -1,0 +1,6 @@
+{
+  "context": "user-123",
+  "level": "WARN",
+  "message": "Rate limit approaching",
+  "timestamp": "2024-01-15T10:31:45Z"
+}
