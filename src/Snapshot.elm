@@ -20,7 +20,7 @@ An idiomatic Elm API for approval/snapshot testing.
         \() -> greet "World"
 
     -- JSON output with pretty printing
-    Snapshot.json 2 "user data" <|
+    Snapshot.json "user data" <|
         \() -> User.encode user
 
     -- With scrubbers for non-deterministic output
@@ -85,21 +85,16 @@ test name fn =
 
 {-| Create a snapshot test for JSON values with pretty printing.
 
-    Snapshot.json 2 "user data" <|
+    Snapshot.json "user data" <|
         \() ->
             User.encode user
 
-The first argument is the indentation level (spaces per level).
-Keys are sorted alphabetically for deterministic output.
+Uses 2-space indentation. Keys are sorted alphabetically for deterministic output.
 
 -}
-json : Int -> String -> (() -> Encode.Value) -> Test
-json indent name fn =
-    let
-        printer =
-            Printer.json indent
-    in
-    PureTest name printer.extension [] (\() -> printer.print (fn ()))
+json : String -> (() -> Encode.Value) -> Test
+json name fn =
+    PureTest name Printer.json.extension [] (\() -> Printer.json.print (fn ()))
 
 
 {-| Create a snapshot test with a custom printer.
@@ -121,7 +116,7 @@ expect printer name fn =
     Snapshot.test "log entry" (\() -> formatLog entry)
         |> Snapshot.withScrubbers [ Scrubber.timestamp ]
 
-    Snapshot.json 2 "api response" (\() -> encodeResponse resp)
+    Snapshot.json "api response" (\() -> encodeResponse resp)
         |> Snapshot.withScrubbers [ Scrubber.guid, Scrubber.timestamp ]
 
 Scrubbers run after printing, replacing patterns like timestamps
@@ -175,18 +170,16 @@ taskTest name task =
 
 {-| Create a BackendTask-powered snapshot test for JSON values.
 
-    Snapshot.taskJson 2 "api response" <|
+    Snapshot.taskJson "api response" <|
         Http.get url decoder
             |> BackendTask.allowFatal
 
+Uses 2-space indentation. Keys are sorted alphabetically for deterministic output.
+
 -}
-taskJson : Int -> String -> BackendTask FatalError Encode.Value -> Test
-taskJson indent name task =
-    let
-        printer =
-            Printer.json indent
-    in
-    TaskTest name printer.extension [] (BackendTask.map printer.print task)
+taskJson : String -> BackendTask FatalError Encode.Value -> Test
+taskJson name task =
+    TaskTest name Printer.json.extension [] (BackendTask.map Printer.json.print task)
 
 
 {-| Create a BackendTask-powered snapshot test with a custom printer.
@@ -237,7 +230,7 @@ type ApproveMode
     run =
         Snapshot.run "Snapshots"
             [ Snapshot.test "greeting" <| \() -> greet "World"
-            , Snapshot.json 2 "config" <| \() -> encodeConfig config
+            , Snapshot.json "config" <| \() -> encodeConfig config
             ]
 
 The first argument is the script name (typically matching the module name).

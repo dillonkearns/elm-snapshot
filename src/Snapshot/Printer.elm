@@ -63,34 +63,29 @@ string =
     }
 
 
-{-| JSON pretty-printer with sorted keys and configurable indentation.
+{-| JSON pretty-printer with sorted keys and 2-space indentation.
 
-    -- Using the convenience function:
-    Snapshot.json 2 "user data" <|
+    Snapshot.json "user data" <|
         \() -> User.encode user
-
-    -- Or with explicit printer:
-    Snapshot.expect (Printer.json 4) "user data" <|
-        \() -> User.encode user
-
-The indent parameter controls spaces per indentation level.
-Use 2 or 4 for readable output with short lines.
 
 **Keys are sorted alphabetically** at all nesting levels for deterministic
 output. This matches the behavior of Go's `json.Marshal` and Jest's
 `pretty-format` - the modern consensus for testing tools.
 
+Uses 2-space indentation, which is the most common convention for JSON
+and produces readable diffs with reasonable line lengths.
+
 Produces `.json` files for syntax highlighting in diff tools.
 
 -}
-json : Int -> Printer Encode.Value
-json indent =
+json : Printer Encode.Value
+json =
     { extension = "json"
     , print =
         \value ->
             value
                 |> sortJsonKeys
-                |> Encode.encode indent
+                |> Encode.encode 2
     }
 
 

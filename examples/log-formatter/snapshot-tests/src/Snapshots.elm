@@ -31,11 +31,11 @@ run =
                 \() -> Formatter.plain errorEntry
             ]
         , Snapshot.describe "json format"
-            [ Snapshot.json 2 "info message" <|
+            [ Snapshot.json "info message" <|
                 \() -> Formatter.json infoEntry
-            , Snapshot.json 2 "warning with context" <|
+            , Snapshot.json "warning with context" <|
                 \() -> Formatter.json warnEntry
-            , Snapshot.json 2 "error message" <|
+            , Snapshot.json "error message" <|
                 \() -> Formatter.json errorEntry
             ]
         , Snapshot.describe "compact format"
@@ -51,7 +51,7 @@ run =
         , Snapshot.describe "with scrubbed timestamps"
             [ Snapshot.test "plain format" (\() -> Formatter.plain dynamicEntry)
                 |> Snapshot.withScrubbers [ Scrubber.timestamp ]
-            , Snapshot.json 2 "json format" (\() -> Formatter.json dynamicEntry)
+            , Snapshot.json "json format" (\() -> Formatter.json dynamicEntry)
                 |> Snapshot.withScrubbers [ Scrubber.timestamp ]
             ]
         ]

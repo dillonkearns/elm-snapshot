@@ -91,7 +91,7 @@ run =
     Snapshot.run "Snapshots"
         [ Snapshot.test "greeting" <|
             \() -> greet "World"
-        , Snapshot.json 2 "user data" <|
+        , Snapshot.json "user data" <|
             \() -> User.encode alice
         ]
 
@@ -126,7 +126,7 @@ Snapshot.test "format date" <|
 ### JSON with Sorted Keys
 
 ```elm
-Snapshot.json 2 "api response" <|
+Snapshot.json "api response" <|
     \() -> Response.encode response
 ```
 
