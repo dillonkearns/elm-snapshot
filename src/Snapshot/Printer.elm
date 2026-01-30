@@ -65,7 +65,7 @@ string =
 
 {-| JSON pretty-printer with sorted keys and 2-space indentation.
 
-    Snapshot.json "user data" <|
+    Snapshot.expect Printer.json "user data" <|
         \() -> User.encode user
 
 **Keys are sorted alphabetically** at all nesting levels for deterministic
