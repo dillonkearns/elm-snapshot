@@ -12,6 +12,12 @@ This approach is particularly powerful for:
 - **Legacy code** - Capturing existing behavior before refactoring
 - **Visual review** - When it's easier to look at output than to specify it programmatically
 
+## When to Use Snapshot Testing
+
+**Good fit:** Formatters, encoders, code generators, complex transformations, characterizing legacy code
+
+**Consider alternatives:** Simple pure functions (elm-test), behavior testing, frequently-changing output
+
 ## Design Goals
 
 - **Elm-native** - Built on elm-pages, feels natural to Elm developers
@@ -26,6 +32,48 @@ elm install dillonkearns/elm-snapshot
 ```
 
 **Prerequisite:** This package requires [elm-pages](https://elm-pages.com/) v10+. Snapshot tests run as elm-pages scripts.
+
+## About elm-pages Scripts
+
+Snapshot tests run as [elm-pages scripts](https://elm-pages.com/docs/elm-pages-scripts) - standalone Elm programs that can perform IO (file operations, HTTP, etc.).
+
+**Why elm-pages?** Standard Elm test frameworks cannot write to the filesystem. elm-pages scripts bridge this gap.
+
+**New to elm-pages?**
+- [elm-pages Scripts Guide](https://elm-pages.com/docs/elm-pages-scripts)
+- [elm-pages Package Docs](https://package.elm-lang.org/packages/dillonkearns/elm-pages/latest/)
+
+You do NOT need a full elm-pages app - just the script runner (`npm install elm-pages`).
+
+## Setting Up a New Project
+
+1. **Create directory structure:**
+   ```bash
+   mkdir -p snapshot-tests/src
+   cd snapshot-tests
+   ```
+
+2. **Initialize npm and install elm-pages:**
+   ```bash
+   npm init -y
+   npm install elm-pages
+   ```
+
+3. **Copy the minimal example** as your starting point:
+   ```bash
+   cp -r path/to/elm-snapshot/examples/minimal/snapshot-tests .
+   ```
+   Adjust `source-directories` in elm.json to include your project's src.
+
+4. **Add npm scripts** to your `package.json`:
+   ```json
+   "scripts": {
+     "test": "elm-pages run snapshot-tests/src/Snapshots.elm",
+     "test:approve": "elm-pages run snapshot-tests/src/Snapshots.elm --approve"
+   }
+   ```
+
+See `examples/minimal/` for a complete minimal setup, or `examples/log-formatter/` for a fuller example with scrubbers and test grouping.
 
 ## Quick Start
 
@@ -99,6 +147,8 @@ Snapshot.test "user record" (\() -> formatUser user)
 Scrubbers replace non-deterministic values with stable placeholders:
 - `2024-01-15T10:30:00Z` becomes `[TIMESTAMP]`
 - `550e8400-e29b-41d4-a716-446655440000` becomes `[GUID-1]`
+
+Multiple occurrences of the same GUID get the same placeholder (`[GUID-1]`), different GUIDs get different numbers (`[GUID-2]`).
 
 ### Grouping with `describe`
 
