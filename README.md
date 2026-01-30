@@ -181,12 +181,13 @@ Use `taskTest`, `taskJson`, or `taskExpect` when your test needs file IO, HTTP r
 ```elm
 import Snapshot.Printer as Printer
 
-myXmlPrinter : Printer.Printer MyXml
-myXmlPrinter xml =
-    Xml.toString xml
+xmlPrinter : Printer.Printer String
+xmlPrinter =
+    Printer.string
+        |> Printer.withExtension "xml"
 
-Snapshot.expect myXmlPrinter "config xml" <|
-    \() -> buildConfig options
+Snapshot.expect xmlPrinter "config xml" <|
+    \() -> Xml.toString (buildConfig options)
 ```
 
 ## CLI Options
