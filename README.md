@@ -52,20 +52,20 @@ You do NOT need a full elm-pages app - just the script runner (`npm install elm-
 The fastest way to add snapshot testing to an existing project:
 
 ```bash
+npm install --save-dev elm-pages
 npx elm-pages run github:dillonkearns/elm-snapshot:script/src/Init.elm
 ```
 
 This creates a `snapshot-tests/` folder with the elm-pages script project. Then:
 
-1. Install elm-pages: `npm install --save-dev elm-pages`
-2. Add scripts to your `package.json`:
+1. Add scripts to your `package.json`:
    ```json
    "scripts": {
      "test": "cd snapshot-tests && elm-pages run src/Snapshots.elm",
      "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve"
    }
    ```
-3. Edit `snapshot-tests/src/Snapshots.elm` to add your tests
+2. Edit `snapshot-tests/src/Snapshots.elm` to add your tests
 
 ### Option 2: Manual Setup
 

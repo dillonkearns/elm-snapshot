@@ -44,18 +44,15 @@ Done! Created snapshot-tests/ folder.
 
 Next steps:
 
-  1. Install elm-pages (if not already installed):
-     npm install --save-dev elm-pages
-
-  2. Add test scripts to your package.json:
+  1. Add test scripts to your package.json:
      "scripts": {
        "test": "cd snapshot-tests && elm-pages run src/Snapshots.elm",
        "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve"
      }
 
-  3. Edit snapshot-tests/src/Snapshots.elm to import your modules and add tests.
+  2. Edit snapshot-tests/src/Snapshots.elm to import your modules and add tests.
 
-  4. Run tests:
+  3. Run tests:
      npm test              # First run will fail (no approved snapshots)
      npm run test:approve  # Approve the snapshots
      npm test              # Tests should pass now
