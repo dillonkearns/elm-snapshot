@@ -68,6 +68,26 @@ run =
                             ]
                       )
                     ]
+
+        -- Grouped tests with describe
+        , Snapshot.describe "String utils"
+            [ Snapshot.test "reverse" <|
+                \() ->
+                    String.reverse "hello"
+            , Snapshot.test "toUpper" <|
+                \() ->
+                    String.toUpper "hello"
+
+            -- Nested describe
+            , Snapshot.describe "trim"
+                [ Snapshot.test "left" <|
+                    \() ->
+                        String.trimLeft "  hello  "
+                , Snapshot.test "right" <|
+                    \() ->
+                        String.trimRight "  hello  "
+                ]
+            ]
         ]
 
 

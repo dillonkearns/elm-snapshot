@@ -552,15 +552,15 @@ elm-pages run tests/Snapshots.elm --list
 
 **Deliverable**: Can handle JSON formatting, timestamps, etc.
 
-### Phase 6: Polish & DX
+### Phase 6: Polish & DX ✅
 
 **Goal**: Production-ready developer experience
 
-- [ ] `describe` for grouping tests
-- [ ] `--list` command
-- [ ] Better error messages
-- [ ] Documentation
-- [ ] Example project
+- [x] `describe` for grouping tests (creates subdirectories, supports nesting)
+- [x] `--list` command (shows all test names with count)
+- [x] Better error messages (clear diff display, approval instructions)
+- [x] Example tests demonstrating all features
+- [ ] Documentation (README, package docs)
 
 **Deliverable**: Ready for real-world use
 

@@ -8,6 +8,7 @@ module Snapshot exposing
     , taskJson
     , taskExpect
     , withScrubbers
+    , describe
     )
 
 {-| Snapshot testing framework for Elm.
@@ -26,11 +27,17 @@ An idiomatic Elm API for approval/snapshot testing.
     Snapshot.test "log entry" (\() -> formatLog entry)
         |> Snapshot.withScrubbers [ Scrubber.timestamp ]
 
+    -- Grouped tests
+    Snapshot.describe "Date formatting"
+        [ Snapshot.test "ISO format" <| \() -> Date.toIso date
+        , Snapshot.test "human readable" <| \() -> Date.toHuman date
+        ]
+
     -- Custom printer
     Snapshot.expect myPrinter "custom format" <|
         \() -> myValue
 
-@docs Test, run, test, json, expect, taskTest, taskJson, taskExpect, withScrubbers
+@docs Test, run, test, json, expect, taskTest, taskJson, taskExpect, withScrubbers, describe
 
 -}
 
@@ -50,6 +57,7 @@ import Snapshot.Scrubber exposing (Scrubber)
 type Test
     = PureTest String (List Scrubber) (() -> String)
     | TaskTest String (List Scrubber) (BackendTask FatalError String)
+    | Describe String (List Test)
 
 
 {-| Create a snapshot test that compares string output.
@@ -116,6 +124,27 @@ withScrubbers scrubbers testCase =
         TaskTest name existingScrubbers task ->
             TaskTest name (existingScrubbers ++ scrubbers) task
 
+        Describe name tests ->
+            Describe name (List.map (withScrubbers scrubbers) tests)
+
+
+{-| Group related tests together.
+
+    Snapshot.describe "Date formatting"
+        [ Snapshot.test "ISO format" <|
+            \() -> Date.toIsoString date
+        , Snapshot.test "human readable" <|
+            \() -> Date.toHumanString date
+        ]
+
+Test names are prefixed with the group name, separated by " / ".
+Snapshot files are stored in subdirectories matching the group structure.
+
+-}
+describe : String -> List Test -> Test
+describe name tests =
+    Describe name tests
+
 
 {-| Create a BackendTask-powered snapshot test for string output.
 
@@ -171,6 +200,7 @@ type Outcome
 type alias CliOptions =
     { approve : ApproveMode
     , ci : Bool
+    , list : Bool
     }
 
 
@@ -184,11 +214,76 @@ run : List Test -> Script
 run tests =
     Script.withCliOptions program
         (\options ->
-            tests
-                |> List.map (runTest options)
-                |> BackendTask.combine
-                |> BackendTask.andThen (reportResults options)
+            let
+                flattenedTests =
+                    List.concatMap (flattenTest "") tests
+            in
+            if options.list then
+                listTests flattenedTests
+
+            else
+                flattenedTests
+                    |> List.map (runFlatTest options)
+                    |> BackendTask.combine
+                    |> BackendTask.andThen (reportResults options)
         )
+
+
+{-| Flatten nested describe blocks into a flat list of tests with prefixed names.
+-}
+flattenTest : String -> Test -> List FlatTest
+flattenTest prefix testCase =
+    case testCase of
+        PureTest name scrubbers fn ->
+            [ { name = prefixName prefix name
+              , scrubbers = scrubbers
+              , task = BackendTask.succeed (fn ())
+              }
+            ]
+
+        TaskTest name scrubbers task ->
+            [ { name = prefixName prefix name
+              , scrubbers = scrubbers
+              , task = task
+              }
+            ]
+
+        Describe groupName nestedTests ->
+            let
+                newPrefix =
+                    prefixName prefix groupName
+            in
+            List.concatMap (flattenTest newPrefix) nestedTests
+
+
+prefixName : String -> String -> String
+prefixName prefix name =
+    if String.isEmpty prefix then
+        name
+
+    else
+        prefix ++ " / " ++ name
+
+
+type alias FlatTest =
+    { name : String
+    , scrubbers : List Scrubber
+    , task : BackendTask FatalError String
+    }
+
+
+listTests : List FlatTest -> BackendTask FatalError ()
+listTests tests =
+    let
+        output =
+            tests
+                |> List.map (\t -> "  " ++ t.name)
+                |> String.join "\n"
+
+        header =
+            String.fromInt (List.length tests) ++ " snapshot tests:\n\n"
+    in
+    Script.log (header ++ output)
 
 
 program : Program.Config CliOptions
@@ -196,7 +291,7 @@ program =
     Program.config
         |> Program.add
             (OptionsParser.build
-                (\approveAll approveOnly ci ->
+                (\approveAll approveOnly ci list ->
                     { approve =
                         if approveAll then
                             ApproveAll
@@ -209,23 +304,20 @@ program =
                                 Nothing ->
                                     NoApprove
                     , ci = ci
+                    , list = list
                     }
                 )
                 |> OptionsParser.with (Option.flag "approve")
                 |> OptionsParser.with (Option.optionalKeywordArg "approve-only")
                 |> OptionsParser.with (Option.flag "ci")
+                |> OptionsParser.with (Option.flag "list")
                 |> OptionsParser.withDoc "Run snapshot tests"
             )
 
 
-runTest : CliOptions -> Test -> BackendTask FatalError TestResult
-runTest options testCase =
-    case testCase of
-        PureTest name scrubbers fn ->
-            runTestWithReceived options name scrubbers (BackendTask.succeed (fn ()))
-
-        TaskTest name scrubbers task ->
-            runTestWithReceived options name scrubbers task
+runFlatTest : CliOptions -> FlatTest -> BackendTask FatalError TestResult
+runFlatTest options flatTest =
+    runTestWithReceived options flatTest.name flatTest.scrubbers flatTest.task
 
 
 runTestWithReceived : CliOptions -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
@@ -345,7 +437,20 @@ deleteReceivedFile path =
 
 snapshotPath : String -> String -> String
 snapshotPath testName extension =
-    "tests/snapshots/" ++ sanitizeName testName ++ extension
+    let
+        -- Split on " / " to get path segments from describe blocks
+        segments =
+            String.split " / " testName
+
+        -- Sanitize each segment
+        sanitizedSegments =
+            List.map sanitizeName segments
+
+        -- Join with "/" to create directory structure
+        relativePath =
+            String.join "/" sanitizedSegments
+    in
+    "tests/snapshots/" ++ relativePath ++ extension
 
 
 sanitizeName : String -> String
