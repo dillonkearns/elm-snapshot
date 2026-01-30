@@ -232,7 +232,8 @@ type ApproveMode
             ]
 
 The first argument is the script name (typically matching the module name).
-This is used to organize snapshots by script.
+This organizes snapshots into `snapshots/<ScriptName>/` directories,
+allowing multiple snapshot scripts in the same project.
 
 Supports CLI options:
 

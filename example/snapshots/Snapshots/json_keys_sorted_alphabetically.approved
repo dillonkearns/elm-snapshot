@@ -1,9 +1,0 @@
-{
-  "apple": "first letter",
-  "middle": 42,
-  "nested": {
-    "a": false,
-    "z": true
-  },
-  "zebra": "last letter"
-}

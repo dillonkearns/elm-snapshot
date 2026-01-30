@@ -1,4 +1,4 @@
-module Snapshot.Printer exposing (Printer, json, jsonRaw, string)
+module Snapshot.Printer exposing (Printer, json, string)
 
 {-| Printers convert domain objects to strings for snapshot comparison.
 
@@ -20,7 +20,7 @@ The printer's job is to create a human-readable, diffable representation.
 
 # Common Printers
 
-@docs string, json, jsonRaw
+@docs string, json
 
 -}
 
@@ -36,12 +36,11 @@ type alias Printer a =
 
 {-| Identity printer - use when your test already returns a String.
 
-    Snapshot.testWith
-        { printer = Printer.string
-        , scrubbers = [ Scrubber.timestamp ]
-        }
-        "log output"
-        (\() -> formatLog entry)
+    Snapshot.expect Printer.string "log output" <|
+        \() -> formatLog entry
+
+Most of the time you'll use `Snapshot.test` directly for string output.
+Use `Printer.string` with `Snapshot.expect` when you want to be explicit.
 
 -}
 string : Printer String
@@ -51,12 +50,13 @@ string =
 
 {-| JSON pretty-printer with sorted keys and configurable indentation.
 
-    Snapshot.testWith
-        { printer = Printer.json 2
-        , scrubbers = []
-        }
-        "user data"
-        (\() -> User.encode user)
+    -- Using the convenience function:
+    Snapshot.json 2 "user data" <|
+        \() -> User.encode user
+
+    -- Or with explicit printer:
+    Snapshot.expect (Printer.json 4) "user data" <|
+        \() -> User.encode user
 
 The indent parameter controls spaces per indentation level.
 Use 2 or 4 for readable output with short lines.
@@ -71,17 +71,6 @@ json indent value =
     value
         |> sortJsonKeys
         |> Encode.encode indent
-
-
-{-| JSON pretty-printer WITHOUT key sorting.
-
-Use this only if you specifically need to preserve insertion order.
-For most snapshot tests, prefer `json` which sorts keys for deterministic output.
-
--}
-jsonRaw : Int -> Printer Encode.Value
-jsonRaw indent value =
-    Encode.encode indent value
 
 
 {-| Recursively sort all object keys in a JSON value.

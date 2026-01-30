@@ -1,0 +1,6 @@
+{
+  "context": "request-abc",
+  "level": "INFO",
+  "message": "Request processed",
+  "timestamp": "[TIMESTAMP]"
+}
