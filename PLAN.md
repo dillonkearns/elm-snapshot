@@ -474,8 +474,14 @@ elm-pages run tests/Snapshots.elm --approve-only "User JSON encoding"
 # CI mode (strict, minimal output)
 elm-pages run tests/Snapshots.elm --ci
 
-# List all snapshots and their status
+# List all test names
 elm-pages run tests/Snapshots.elm --list
+
+# Remove obsolete snapshots (orphaned .approved files)
+elm-pages run tests/Snapshots.elm --prune
+
+# Open diff tool for failures (code, opendiff, meld, kdiff3, or any command)
+elm-pages run tests/Snapshots.elm --reporter=code
 ```
 
 ### Exit Codes
@@ -560,6 +566,11 @@ elm-pages run tests/Snapshots.elm --list
 - [x] `--list` command (shows all test names with count)
 - [x] Better error messages (clear diff display, approval instructions)
 - [x] Example tests demonstrating all features
+- [x] Duplicate test name detection (fails fast with clear error)
+- [x] Obsolete snapshot detection (warns about orphaned .approved files)
+- [x] `--prune` flag to remove obsolete snapshots
+- [x] Untracked snapshot detection (warns about .approved files not in git)
+- [x] `--reporter` flag to open diff tools (code, opendiff, meld, kdiff3, etc.)
 - [ ] Documentation (README, package docs)
 
 **Deliverable**: Ready for real-world use

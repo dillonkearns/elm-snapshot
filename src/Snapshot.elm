@@ -43,6 +43,8 @@ An idiomatic Elm API for approval/snapshot testing.
 
 import BackendTask exposing (BackendTask)
 import BackendTask.File as File
+import BackendTask.Glob as Glob
+import BackendTask.Stream as Stream
 import Cli.Option as Option
 import Cli.OptionsParser as OptionsParser
 import Cli.Program as Program
@@ -50,6 +52,7 @@ import Diff exposing (Change(..))
 import FatalError exposing (FatalError)
 import Json.Encode as Encode
 import Pages.Script as Script exposing (Script)
+import Set exposing (Set)
 import Snapshot.Printer as Printer exposing (Printer)
 import Snapshot.Scrubber exposing (Scrubber)
 
@@ -201,6 +204,8 @@ type alias CliOptions =
     { approve : ApproveMode
     , ci : Bool
     , list : Bool
+    , prune : Bool
+    , reporter : Maybe String
     }
 
 
@@ -217,16 +222,99 @@ run tests =
             let
                 flattenedTests =
                     List.concatMap (flattenTest "") tests
+
+                testNames =
+                    List.map .name flattenedTests
             in
-            if options.list then
-                listTests flattenedTests
+            -- First check for duplicate test names
+            case findDuplicates testNames of
+                firstDuplicate :: _ ->
+                    BackendTask.fail
+                        (FatalError.fromString
+                            ("Duplicate test name: \""
+                                ++ firstDuplicate
+                                ++ "\"\n\nEach snapshot test must have a unique name."
+                            )
+                        )
+
+                [] ->
+                    if options.list then
+                        listTests flattenedTests
+
+                    else
+                        -- Run tests and check for obsolete/untracked snapshots
+                        BackendTask.map3 (\a b c -> ( a, b, c ))
+                            (flattenedTests
+                                |> List.map (runFlatTest options)
+                                |> BackendTask.combine
+                            )
+                            (findObsoleteSnapshots testNames)
+                            (findUntrackedSnapshots testNames)
+                            |> BackendTask.andThen
+                                (\( results, obsolete, untracked ) ->
+                                    reportResultsWithObsolete options results obsolete untracked
+                                )
+        )
+
+
+{-| Find duplicate strings in a list.
+-}
+findDuplicates : List String -> List String
+findDuplicates names =
+    let
+        step name ( seen, duplicates ) =
+            if Set.member name seen then
+                ( seen, name :: duplicates )
 
             else
-                flattenedTests
-                    |> List.map (runFlatTest options)
-                    |> BackendTask.combine
-                    |> BackendTask.andThen (reportResults options)
-        )
+                ( Set.insert name seen, duplicates )
+    in
+    List.foldl step ( Set.empty, [] ) names
+        |> Tuple.second
+        |> List.reverse
+
+
+{-| Find .approved files that don't correspond to any test.
+-}
+findObsoleteSnapshots : List String -> BackendTask FatalError (List String)
+findObsoleteSnapshots testNames =
+    let
+        expectedPaths =
+            testNames
+                |> List.map (\name -> snapshotPath name ".approved")
+                |> Set.fromList
+    in
+    Glob.succeed identity
+        |> Glob.captureFilePath
+        |> Glob.match (Glob.literal "snapshots/")
+        |> Glob.match Glob.recursiveWildcard
+        |> Glob.match (Glob.literal ".approved")
+        |> Glob.toBackendTask
+        |> BackendTask.map
+            (\approvedFiles ->
+                approvedFiles
+                    |> List.filter (\path -> not (Set.member path expectedPaths))
+            )
+
+
+{-| Find .approved files that exist but aren't tracked by git.
+-}
+findUntrackedSnapshots : List String -> BackendTask FatalError (List String)
+findUntrackedSnapshots _ =
+    -- Use git ls-files to find untracked .approved files
+    Stream.commandWithOptions
+        (Stream.defaultCommandOptions |> Stream.allowNon0Status)
+        "git"
+        [ "ls-files", "--others", "--exclude-standard", "snapshots/" ]
+        |> Stream.read
+        |> BackendTask.map
+            (\result ->
+                result.body
+                    |> String.trim
+                    |> String.lines
+                    |> List.filter (\line -> String.endsWith ".approved" line && not (String.isEmpty line))
+            )
+        |> BackendTask.onError (\_ -> BackendTask.succeed [])
 
 
 {-| Flatten nested describe blocks into a flat list of tests with prefixed names.
@@ -291,7 +379,7 @@ program =
     Program.config
         |> Program.add
             (OptionsParser.build
-                (\approveAll approveOnly ci list ->
+                (\approveAll approveOnly ci list prune reporter ->
                     { approve =
                         if approveAll then
                             ApproveAll
@@ -305,12 +393,16 @@ program =
                                     NoApprove
                     , ci = ci
                     , list = list
+                    , prune = prune
+                    , reporter = reporter
                     }
                 )
                 |> OptionsParser.with (Option.flag "approve")
                 |> OptionsParser.with (Option.optionalKeywordArg "approve-only")
                 |> OptionsParser.with (Option.flag "ci")
                 |> OptionsParser.with (Option.flag "list")
+                |> OptionsParser.with (Option.flag "prune")
+                |> OptionsParser.with (Option.optionalKeywordArg "reporter")
                 |> OptionsParser.withDoc "Run snapshot tests"
             )
 
@@ -450,7 +542,7 @@ snapshotPath testName extension =
         relativePath =
             String.join "/" sanitizedSegments
     in
-    "tests/snapshots/" ++ relativePath ++ extension
+    "snapshots/" ++ relativePath ++ extension
 
 
 sanitizeName : String -> String
@@ -468,14 +560,14 @@ sanitizeName name =
         |> String.replace "*" "_"
 
 
-reportResults : CliOptions -> List TestResult -> BackendTask FatalError ()
-reportResults options results =
+reportResultsWithObsolete : CliOptions -> List TestResult -> List String -> List String -> BackendTask FatalError ()
+reportResultsWithObsolete options results obsoleteSnapshots untrackedSnapshots =
     let
         passing =
             List.filter (\r -> r.outcome == Pass) results
 
         failing =
-            List.filter (isFailing) results
+            List.filter isFailing results
 
         approved =
             List.filter (\r -> r.outcome == Approved) results
@@ -483,31 +575,130 @@ reportResults options results =
         resultLines =
             List.map (formatResult options) results
 
-        summary =
-            if options.ci then
-                String.fromInt (List.length passing)
-                    ++ " passing, "
-                    ++ String.fromInt (List.length failing)
-                    ++ " failing"
+        obsoleteCount =
+            List.length obsoleteSnapshots
 
-            else if List.length approved > 0 then
-                String.fromInt (List.length passing)
-                    ++ " passing, "
-                    ++ String.fromInt (List.length failing)
-                    ++ " failing, "
-                    ++ String.fromInt (List.length approved)
-                    ++ " approved"
+        untrackedCount =
+            List.length untrackedSnapshots
+
+        summaryParts =
+            [ String.fromInt (List.length passing) ++ " passing"
+            , String.fromInt (List.length failing) ++ " failing"
+            ]
+                ++ (if List.length approved > 0 then
+                        [ String.fromInt (List.length approved) ++ " approved" ]
+
+                    else
+                        []
+                   )
+                ++ (if obsoleteCount > 0 && not options.prune then
+                        [ String.fromInt obsoleteCount ++ " obsolete" ]
+
+                    else
+                        []
+                   )
+                ++ (if untrackedCount > 0 then
+                        [ String.fromInt untrackedCount ++ " untracked" ]
+
+                    else
+                        []
+                   )
+
+        summary =
+            String.join ", " summaryParts
+
+        obsoleteWarning =
+            if obsoleteCount > 0 && not options.ci then
+                if options.prune then
+                    "\n\n"
+                        ++ yellow "Pruned"
+                        ++ " "
+                        ++ String.fromInt obsoleteCount
+                        ++ " obsolete snapshot(s):\n"
+                        ++ (obsoleteSnapshots
+                                |> List.map (\p -> "  " ++ p)
+                                |> String.join "\n"
+                           )
+
+                else
+                    "\n\n"
+                        ++ yellow "⚠"
+                        ++ " "
+                        ++ String.fromInt obsoleteCount
+                        ++ " obsolete snapshot(s):\n"
+                        ++ (obsoleteSnapshots
+                                |> List.map (\p -> "  " ++ p)
+                                |> String.join "\n"
+                           )
+                        ++ "\n\n  Run with --prune to remove obsolete snapshots."
 
             else
-                String.fromInt (List.length passing)
-                    ++ " passing, "
-                    ++ String.fromInt (List.length failing)
-                    ++ " failing"
+                ""
+
+        untrackedWarning =
+            if untrackedCount > 0 && not options.ci then
+                "\n\n"
+                    ++ yellow "⚠"
+                    ++ " "
+                    ++ String.fromInt untrackedCount
+                    ++ " untracked snapshot(s):\n"
+                    ++ (untrackedSnapshots
+                            |> List.map (\p -> "  " ++ p)
+                            |> String.join "\n"
+                       )
+                    ++ "\n\n  These exist locally but aren't in git. Run:\n    git add "
+                    ++ (if untrackedCount == 1 then
+                            Maybe.withDefault "" (List.head untrackedSnapshots)
+
+                        else
+                            "snapshots/"
+                       )
+
+            else
+                ""
 
         output =
-            String.join "\n" resultLines ++ "\n\n" ++ summary
+            String.join "\n" resultLines ++ "\n\n" ++ summary ++ obsoleteWarning ++ untrackedWarning
+
+        -- Prune obsolete snapshots if requested
+        pruneTask =
+            if options.prune && obsoleteCount > 0 then
+                obsoleteSnapshots
+                    |> List.map deleteFile
+                    |> BackendTask.combine
+                    |> BackendTask.map (\_ -> ())
+
+            else
+                BackendTask.succeed ()
+
+        -- Open diff tool for failures if reporter is specified
+        reporterTask =
+            case options.reporter of
+                Just reporterName ->
+                    failing
+                        |> List.filterMap
+                            (\result ->
+                                case result.outcome of
+                                    FailMismatch _ ->
+                                        Just ( snapshotPath result.name ".approved", snapshotPath result.name ".received" )
+
+                                    FailNew _ ->
+                                        -- For new snapshots, just show the received file
+                                        Just ( "/dev/null", snapshotPath result.name ".received" )
+
+                                    _ ->
+                                        Nothing
+                            )
+                        |> List.map (openDiffTool reporterName)
+                        |> BackendTask.combine
+                        |> BackendTask.map (\_ -> ())
+
+                Nothing ->
+                    BackendTask.succeed ()
     in
-    Script.log output
+    pruneTask
+        |> BackendTask.andThen (\_ -> reporterTask)
+        |> BackendTask.andThen (\_ -> Script.log output)
         |> BackendTask.andThen
             (\_ ->
                 if List.isEmpty failing then
@@ -516,6 +707,36 @@ reportResults options results =
                 else
                     BackendTask.fail (FatalError.fromString "Tests failed")
             )
+
+
+{-| Open a diff tool to compare two files.
+-}
+openDiffTool : String -> ( String, String ) -> BackendTask FatalError ()
+openDiffTool reporter ( approvedPath, receivedPath ) =
+    case reporter of
+        "code" ->
+            Script.exec "code" [ "--diff", approvedPath, receivedPath ]
+
+        "opendiff" ->
+            Script.exec "opendiff" [ approvedPath, receivedPath ]
+
+        "meld" ->
+            Script.exec "meld" [ approvedPath, receivedPath ]
+
+        "kdiff3" ->
+            Script.exec "kdiff3" [ approvedPath, receivedPath ]
+
+        "diff" ->
+            Script.exec "diff" [ "-u", approvedPath, receivedPath ]
+
+        other ->
+            -- Try to use it as a command directly
+            Script.exec other [ approvedPath, receivedPath ]
+
+
+deleteFile : String -> BackendTask FatalError ()
+deleteFile path =
+    Script.exec "rm" [ path ]
 
 
 isFailing : TestResult -> Bool
@@ -629,6 +850,11 @@ red text =
 green : String -> String
 green text =
     "\u{001B}[32m" ++ text ++ "\u{001B}[0m"
+
+
+yellow : String -> String
+yellow text =
+    "\u{001B}[33m" ++ text ++ "\u{001B}[0m"
 
 
 dim : String -> String
