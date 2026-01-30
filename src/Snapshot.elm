@@ -3,10 +3,10 @@ module Snapshot exposing
     , run
     , test
     , json
-    , expect
+    , custom
     , taskTest
     , taskJson
-    , taskExpect
+    , taskCustom
     , withScrubbers
     , describe
     )
@@ -34,10 +34,10 @@ An idiomatic Elm API for approval/snapshot testing.
         ]
 
     -- Custom printer
-    Snapshot.expect myPrinter "custom format" <|
+    Snapshot.custom myPrinter "custom format" <|
         \() -> myValue
 
-@docs Test, run, test, json, expect, taskTest, taskJson, taskExpect, withScrubbers, describe
+@docs Test, run, test, json, custom, taskTest, taskJson, taskCustom, withScrubbers, describe
 
 -}
 
@@ -59,7 +59,7 @@ import Snapshot.Scrubber exposing (Scrubber)
 
 {-| An opaque type representing a snapshot test or group of tests.
 
-Create tests using `test`, `json`, `expect`, or their `task*` variants.
+Create tests using `test`, `json`, `custom`, or their `task*` variants.
 Group related tests using `describe`.
 
 -}
@@ -99,15 +99,15 @@ json name fn =
 
 {-| Create a snapshot test with a custom printer.
 
-    Snapshot.expect myXmlPrinter "config file" <|
+    Snapshot.custom myXmlPrinter "config file" <|
         \() ->
             buildConfig options
 
 Use this when you need a custom `a -> String` conversion.
 
 -}
-expect : Printer a -> String -> (() -> a) -> Test
-expect printer name fn =
+custom : Printer a -> String -> (() -> a) -> Test
+custom printer name fn =
     PureTest name printer.extension [] (\() -> printer.print (fn ()))
 
 
@@ -184,13 +184,13 @@ taskJson name task =
 
 {-| Create a BackendTask-powered snapshot test with a custom printer.
 
-    Snapshot.taskExpect myPrinter "fetched data" <|
+    Snapshot.taskCustom myPrinter "fetched data" <|
         fetchData
             |> BackendTask.allowFatal
 
 -}
-taskExpect : Printer a -> String -> BackendTask FatalError a -> Test
-taskExpect printer name task =
+taskCustom : Printer a -> String -> BackendTask FatalError a -> Test
+taskCustom printer name task =
     TaskTest name printer.extension [] (BackendTask.map printer.print task)
 
 

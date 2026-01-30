@@ -174,7 +174,7 @@ Snapshot.taskTest "config file contents" <|
         |> BackendTask.allowFatal
 ```
 
-Use `taskTest`, `taskJson`, or `taskExpect` when your test needs file IO, HTTP requests, or other effects.
+Use `taskTest`, `taskJson`, or `taskCustom` when your test needs file IO, HTTP requests, or other effects.
 
 ### Custom Printers
 
@@ -186,7 +186,7 @@ xmlPrinter =
     Printer.string
         |> Printer.withExtension "xml"
 
-Snapshot.expect xmlPrinter "config xml" <|
+Snapshot.custom xmlPrinter "config xml" <|
     \() -> Xml.toString (buildConfig options)
 ```
 

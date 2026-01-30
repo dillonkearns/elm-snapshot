@@ -50,7 +50,7 @@ type alias Printer a =
 
 {-| Identity printer for string output.
 
-    Snapshot.expect Printer.string "log output" <|
+    Snapshot.custom Printer.string "log output" <|
         \() -> formatLog entry
 
 Produces `.txt` files by default.
@@ -65,7 +65,7 @@ string =
 
 {-| JSON pretty-printer with sorted keys and 2-space indentation.
 
-    Snapshot.expect Printer.json "user data" <|
+    Snapshot.custom Printer.json "user data" <|
         \() -> User.encode user
 
 **Keys are sorted alphabetically** at all nesting levels for deterministic
