@@ -49,19 +49,23 @@ You do NOT need a full elm-pages app - just the script runner (`npm install elm-
 
 ### Option 1: Quick Start with Remote Script (Recommended)
 
-The fastest way to get started is using the remote init script:
+The fastest way to add snapshot testing to an existing project:
 
 ```bash
-mkdir my-project && cd my-project
 npx elm-pages run github:dillonkearns/elm-snapshot:script/src/Init.elm
-npm install
-npm test
 ```
 
-This creates a complete project structure with:
-- `snapshot-tests/` - elm-pages script project for your tests
-- `src/Example.elm` - sample module to test
-- `package.json` - npm scripts for running tests
+This creates a `snapshot-tests/` folder with the elm-pages script project. Then:
+
+1. Install elm-pages: `npm install --save-dev elm-pages`
+2. Add scripts to your `package.json`:
+   ```json
+   "scripts": {
+     "test": "cd snapshot-tests && elm-pages run src/Snapshots.elm",
+     "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve"
+   }
+   ```
+3. Edit `snapshot-tests/src/Snapshots.elm` to add your tests
 
 ### Option 2: Manual Setup
 
