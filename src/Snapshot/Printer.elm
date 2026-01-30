@@ -12,6 +12,16 @@ The printer's job is to create a human-readable, diffable representation.
   - Include inputs in output for context
   - Change printers in separate commits from logic changes
 
+
+# Definition
+
+@docs Printer
+
+
+# Common Printers
+
+@docs string, json, jsonRaw
+
 -}
 
 import Json.Decode as Decode

@@ -15,6 +15,21 @@ module Snapshot.Scrubber exposing
 Scrubbers are applied AFTER the printer converts your value to a string.
 They replace variable content (timestamps, GUIDs, etc.) with stable placeholders.
 
+
+# Definition
+
+@docs Scrubber
+
+
+# Built-in Scrubbers
+
+@docs timestamp, guid
+
+
+# Custom Scrubbers
+
+@docs custom, regex, all
+
 -}
 
 import Dict exposing (Dict)

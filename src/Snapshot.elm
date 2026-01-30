@@ -57,6 +57,12 @@ import Snapshot.Printer as Printer exposing (Printer)
 import Snapshot.Scrubber exposing (Scrubber)
 
 
+{-| An opaque type representing a snapshot test or group of tests.
+
+Create tests using `test`, `json`, `expect`, or their `task*` variants.
+Group related tests using `describe`.
+
+-}
 type Test
     = PureTest String (List Scrubber) (() -> String)
     | TaskTest String (List Scrubber) (BackendTask FatalError String)
@@ -215,6 +221,26 @@ type ApproveMode
     | ApproveNamed String
 
 
+{-| Run a list of snapshot tests as an elm-pages Script.
+
+    -- In your Snapshots.elm script:
+    run : Script
+    run =
+        Snapshot.run
+            [ Snapshot.test "greeting" <| \() -> greet "World"
+            , Snapshot.json 2 "config" <| \() -> encodeConfig config
+            ]
+
+Supports CLI options:
+
+  - `--approve` - Approve all new/changed snapshots
+  - `--approve-only "test name"` - Approve a specific test
+  - `--ci` - Compact output for CI environments
+  - `--list` - List all test names without running
+  - `--prune` - Remove obsolete snapshot files
+  - `--reporter code|opendiff|meld` - Open diff tool for failures
+
+-}
 run : List Test -> Script
 run tests =
     Script.withCliOptions program
