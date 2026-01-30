@@ -725,7 +725,9 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
             else
                 BackendTask.succeed ()
 
-        -- Open diff tool for mismatches only (new snapshots have nothing to diff against)
+        -- Open diff tool for failures (both mismatches and new snapshots)
+        -- Use sequence (not combine) to run diff tools one at a time, since GUI diff tools
+        -- like meld often have single-instance behavior that breaks with parallel launching
         reporterTask =
             case options.reporter of
                 Just reporterName ->
@@ -734,13 +736,31 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
                             (\result ->
                                 case result.outcome of
                                     FailMismatch _ ->
-                                        Just ( snapshotPath scriptName result.name ".approved", snapshotPath scriptName result.name ".received" )
+                                        Just
+                                            (openDiffTool reporterName
+                                                ( snapshotPath scriptName result.name ".approved"
+                                                , snapshotPath scriptName result.name ".received"
+                                                )
+                                            )
+
+                                    FailNew _ ->
+                                        let
+                                            approvedPath =
+                                                snapshotPath scriptName result.name ".approved"
+
+                                            receivedPath =
+                                                snapshotPath scriptName result.name ".received"
+                                        in
+                                        -- Create empty .approved file first so diff tool has something to compare against
+                                        Just
+                                            (writeApprovedFile approvedPath ""
+                                                |> BackendTask.andThen (\_ -> openDiffTool reporterName ( approvedPath, receivedPath ))
+                                            )
 
                                     _ ->
                                         Nothing
                             )
-                        |> List.map (openDiffTool reporterName)
-                        |> BackendTask.combine
+                        |> BackendTask.sequence
                         |> BackendTask.map (\_ -> ())
 
                 Nothing ->
