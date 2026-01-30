@@ -226,10 +226,13 @@ type ApproveMode
     -- In your Snapshots.elm script:
     run : Script
     run =
-        Snapshot.run
+        Snapshot.run "Snapshots"
             [ Snapshot.test "greeting" <| \() -> greet "World"
             , Snapshot.json 2 "config" <| \() -> encodeConfig config
             ]
+
+The first argument is the script name (typically matching the module name).
+This is used to organize snapshots by script.
 
 Supports CLI options:
 
@@ -241,8 +244,8 @@ Supports CLI options:
   - `--reporter code|opendiff|meld` - Open diff tool for failures
 
 -}
-run : List Test -> Script
-run tests =
+run : String -> List Test -> Script
+run scriptName tests =
     Script.withCliOptions program
         (\options ->
             let
@@ -265,20 +268,20 @@ run tests =
 
                 [] ->
                     if options.list then
-                        listTests flattenedTests
+                        listTests scriptName flattenedTests
 
                     else
                         -- Run tests and check for obsolete/untracked snapshots
                         BackendTask.map3 (\a b c -> ( a, b, c ))
                             (flattenedTests
-                                |> List.map (runFlatTest options)
+                                |> List.map (runFlatTest scriptName options)
                                 |> BackendTask.combine
                             )
-                            (findObsoleteSnapshots testNames)
-                            (findUntrackedSnapshots testNames)
+                            (findObsoleteSnapshots scriptName testNames)
+                            (findUntrackedSnapshots scriptName testNames)
                             |> BackendTask.andThen
                                 (\( results, obsolete, untracked ) ->
-                                    reportResultsWithObsolete options results obsolete untracked
+                                    reportResultsWithObsolete scriptName options results obsolete untracked
                                 )
         )
 
@@ -302,17 +305,20 @@ findDuplicates names =
 
 {-| Find .approved files that don't correspond to any test.
 -}
-findObsoleteSnapshots : List String -> BackendTask FatalError (List String)
-findObsoleteSnapshots testNames =
+findObsoleteSnapshots : String -> List String -> BackendTask FatalError (List String)
+findObsoleteSnapshots scriptName testNames =
     let
         expectedPaths =
             testNames
-                |> List.map (\name -> snapshotPath name ".approved")
+                |> List.map (\name -> snapshotPath scriptName name ".approved")
                 |> Set.fromList
+
+        snapshotDir =
+            "snapshots/" ++ sanitizeName scriptName ++ "/"
     in
     Glob.succeed identity
         |> Glob.captureFilePath
-        |> Glob.match (Glob.literal "snapshots/")
+        |> Glob.match (Glob.literal snapshotDir)
         |> Glob.match Glob.recursiveWildcard
         |> Glob.match (Glob.literal ".approved")
         |> Glob.toBackendTask
@@ -325,13 +331,17 @@ findObsoleteSnapshots testNames =
 
 {-| Find .approved files that exist but aren't tracked by git.
 -}
-findUntrackedSnapshots : List String -> BackendTask FatalError (List String)
-findUntrackedSnapshots _ =
+findUntrackedSnapshots : String -> List String -> BackendTask FatalError (List String)
+findUntrackedSnapshots scriptName _ =
+    let
+        snapshotDir =
+            "snapshots/" ++ sanitizeName scriptName ++ "/"
+    in
     -- Use git ls-files to find untracked .approved files
     Stream.commandWithOptions
         (Stream.defaultCommandOptions |> Stream.allowNon0Status)
         "git"
-        [ "ls-files", "--others", "--exclude-standard", "snapshots/" ]
+        [ "ls-files", "--others", "--exclude-standard", snapshotDir ]
         |> Stream.read
         |> BackendTask.map
             (\result ->
@@ -386,8 +396,8 @@ type alias FlatTest =
     }
 
 
-listTests : List FlatTest -> BackendTask FatalError ()
-listTests tests =
+listTests : String -> List FlatTest -> BackendTask FatalError ()
+listTests scriptName tests =
     let
         output =
             tests
@@ -395,7 +405,7 @@ listTests tests =
                 |> String.join "\n"
 
         header =
-            String.fromInt (List.length tests) ++ " snapshot tests:\n\n"
+            scriptName ++ ": " ++ String.fromInt (List.length tests) ++ " snapshot tests\n\n"
     in
     Script.log (header ++ output)
 
@@ -433,19 +443,19 @@ program =
             )
 
 
-runFlatTest : CliOptions -> FlatTest -> BackendTask FatalError TestResult
-runFlatTest options flatTest =
-    runTestWithReceived options flatTest.name flatTest.scrubbers flatTest.task
+runFlatTest : String -> CliOptions -> FlatTest -> BackendTask FatalError TestResult
+runFlatTest scriptName options flatTest =
+    runTestWithReceived scriptName options flatTest.name flatTest.scrubbers flatTest.task
 
 
-runTestWithReceived : CliOptions -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
-runTestWithReceived options name scrubbers receivedTask =
+runTestWithReceived : String -> CliOptions -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
+runTestWithReceived scriptName options name scrubbers receivedTask =
     let
         approvedPath =
-            snapshotPath name ".approved"
+            snapshotPath scriptName name ".approved"
 
         receivedPath =
-            snapshotPath name ".received"
+            snapshotPath scriptName name ".received"
 
         shouldApprove =
             case options.approve of
@@ -553,8 +563,8 @@ deleteReceivedFile path =
     BackendTask.succeed ()
 
 
-snapshotPath : String -> String -> String
-snapshotPath testName extension =
+snapshotPath : String -> String -> String -> String
+snapshotPath scriptName testName extension =
     let
         -- Split on " / " to get path segments from describe blocks
         segments =
@@ -568,7 +578,7 @@ snapshotPath testName extension =
         relativePath =
             String.join "/" sanitizedSegments
     in
-    "snapshots/" ++ relativePath ++ extension
+    "snapshots/" ++ sanitizeName scriptName ++ "/" ++ relativePath ++ extension
 
 
 sanitizeName : String -> String
@@ -586,8 +596,8 @@ sanitizeName name =
         |> String.replace "*" "_"
 
 
-reportResultsWithObsolete : CliOptions -> List TestResult -> List String -> List String -> BackendTask FatalError ()
-reportResultsWithObsolete options results obsoleteSnapshots untrackedSnapshots =
+reportResultsWithObsolete : String -> CliOptions -> List TestResult -> List String -> List String -> BackendTask FatalError ()
+reportResultsWithObsolete scriptName options results obsoleteSnapshots untrackedSnapshots =
     let
         passing =
             List.filter (\r -> r.outcome == Pass) results
@@ -599,7 +609,7 @@ reportResultsWithObsolete options results obsoleteSnapshots untrackedSnapshots =
             List.filter (\r -> r.outcome == Approved) results
 
         resultLines =
-            List.map (formatResult options) results
+            List.map (formatResult scriptName options) results
 
         obsoleteCount =
             List.length obsoleteSnapshots
@@ -706,11 +716,11 @@ reportResultsWithObsolete options results obsoleteSnapshots untrackedSnapshots =
                             (\result ->
                                 case result.outcome of
                                     FailMismatch _ ->
-                                        Just ( snapshotPath result.name ".approved", snapshotPath result.name ".received" )
+                                        Just ( snapshotPath scriptName result.name ".approved", snapshotPath scriptName result.name ".received" )
 
                                     FailNew _ ->
                                         -- For new snapshots, just show the received file
-                                        Just ( "/dev/null", snapshotPath result.name ".received" )
+                                        Just ( "/dev/null", snapshotPath scriptName result.name ".received" )
 
                                     _ ->
                                         Nothing
@@ -781,8 +791,8 @@ isFailing result =
             True
 
 
-formatResult : CliOptions -> TestResult -> String
-formatResult options result =
+formatResult : String -> CliOptions -> TestResult -> String
+formatResult scriptName options result =
     case result.outcome of
         Pass ->
             green "✓" ++ " " ++ result.name
@@ -802,9 +812,9 @@ formatResult options result =
                     ++ indentBlock (green received)
                     ++ "\n\n  To approve this snapshot, run with:\n    --approve"
                     ++ "\n\n  Or manually:\n    mv "
-                    ++ snapshotPath result.name ".received"
+                    ++ snapshotPath scriptName result.name ".received"
                     ++ " "
-                    ++ snapshotPath result.name ".approved"
+                    ++ snapshotPath scriptName result.name ".approved"
 
         FailMismatch { expected, received } ->
             if options.ci then
@@ -818,9 +828,9 @@ formatResult options result =
                     ++ formatDiff expected received
                     ++ "\n\n  To approve this change, run with:\n    --approve"
                     ++ "\n\n  Or manually:\n    mv "
-                    ++ snapshotPath result.name ".received"
+                    ++ snapshotPath scriptName result.name ".received"
                     ++ " "
-                    ++ snapshotPath result.name ".approved"
+                    ++ snapshotPath scriptName result.name ".approved"
 
 
 formatDiff : String -> String -> String

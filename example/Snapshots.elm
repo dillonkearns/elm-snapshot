@@ -15,7 +15,7 @@ import Snapshot.Scrubber as Scrubber
 
 run : Script
 run =
-    Snapshot.run
+    Snapshot.run "Snapshots"
         [ -- Pure tests (no IO) - string output
           Snapshot.test "greeting" <|
             \() ->
