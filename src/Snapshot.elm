@@ -694,8 +694,25 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
             else
                 ""
 
+        -- Check if all tests are new (no approved files found at all)
+        allTestsAreNew =
+            List.all isFailNew results && not (List.isEmpty results)
+
+        noApprovedNote =
+            if allTestsAreNew && not options.ci then
+                "\n\n"
+                    ++ yellow "Note:"
+                    ++ " No existing snapshots found in snapshots/"
+                    ++ sanitizeName scriptName
+                    ++ "/\n"
+                    ++ "  - First run? Use --approve to create snapshots\n"
+                    ++ "  - Expected existing snapshots? Check your working directory"
+
+            else
+                ""
+
         output =
-            String.join "\n" resultLines ++ "\n\n" ++ summary ++ obsoleteWarning ++ untrackedWarning
+            String.join "\n" resultLines ++ "\n\n" ++ summary ++ obsoleteWarning ++ untrackedWarning ++ noApprovedNote
 
         -- Prune obsolete snapshots if requested
         pruneTask =
@@ -708,7 +725,7 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
             else
                 BackendTask.succeed ()
 
-        -- Open diff tool for failures if reporter is specified
+        -- Open diff tool for mismatches only (new snapshots have nothing to diff against)
         reporterTask =
             case options.reporter of
                 Just reporterName ->
@@ -718,10 +735,6 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
                                 case result.outcome of
                                     FailMismatch _ ->
                                         Just ( snapshotPath scriptName result.name ".approved", snapshotPath scriptName result.name ".received" )
-
-                                    FailNew _ ->
-                                        -- For new snapshots, just show the received file
-                                        Just ( "/dev/null", snapshotPath scriptName result.name ".received" )
 
                                     _ ->
                                         Nothing
@@ -790,6 +803,16 @@ isFailing result =
 
         FailMismatch _ ->
             True
+
+
+isFailNew : TestResult -> Bool
+isFailNew result =
+    case result.outcome of
+        FailNew _ ->
+            True
+
+        _ ->
+            False
 
 
 formatResult : String -> CliOptions -> TestResult -> String
