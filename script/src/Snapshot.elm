@@ -1,4 +1,38 @@
-module Snapshot exposing (Test, run, taskTest, test)
+module Snapshot exposing
+    ( Test
+    , run
+    , test
+    , json
+    , expect
+    , taskTest
+    , taskJson
+    , taskExpect
+    , withScrubbers
+    )
+
+{-| Snapshot testing framework for Elm.
+
+An idiomatic Elm API for approval/snapshot testing.
+
+    -- String output (most common)
+    Snapshot.test "greeting" <|
+        \() -> greet "World"
+
+    -- JSON output with pretty printing
+    Snapshot.json 2 "user data" <|
+        \() -> User.encode user
+
+    -- With scrubbers for non-deterministic output
+    Snapshot.test "log entry" (\() -> formatLog entry)
+        |> Snapshot.withScrubbers [ Scrubber.timestamp ]
+
+    -- Custom printer
+    Snapshot.expect myPrinter "custom format" <|
+        \() -> myValue
+
+@docs Test, run, test, json, expect, taskTest, taskJson, taskExpect, withScrubbers
+
+-}
 
 import BackendTask exposing (BackendTask)
 import BackendTask.File as File
@@ -7,22 +41,118 @@ import Cli.OptionsParser as OptionsParser
 import Cli.Program as Program
 import Diff exposing (Change(..))
 import FatalError exposing (FatalError)
+import Json.Encode as Encode
 import Pages.Script as Script exposing (Script)
+import Snapshot.Printer as Printer exposing (Printer)
+import Snapshot.Scrubber exposing (Scrubber)
 
 
 type Test
-    = PureTest String (() -> String)
-    | TaskTest String (BackendTask FatalError String)
+    = PureTest String (List Scrubber) (() -> String)
+    | TaskTest String (List Scrubber) (BackendTask FatalError String)
 
 
+{-| Create a snapshot test that compares string output.
+
+    Snapshot.test "greeting" <|
+        \() ->
+            greet "World"
+
+This is the most common form - use when your function already returns a String.
+
+-}
 test : String -> (() -> String) -> Test
 test name fn =
-    PureTest name fn
+    PureTest name [] fn
 
 
+{-| Create a snapshot test for JSON values with pretty printing.
+
+    Snapshot.json 2 "user data" <|
+        \() ->
+            User.encode user
+
+The first argument is the indentation level (spaces per level).
+Keys are sorted alphabetically for deterministic output.
+
+-}
+json : Int -> String -> (() -> Encode.Value) -> Test
+json indent name fn =
+    PureTest name [] (\() -> Printer.json indent (fn ()))
+
+
+{-| Create a snapshot test with a custom printer.
+
+    Snapshot.expect myXmlPrinter "config file" <|
+        \() ->
+            buildConfig options
+
+Use this when you need a custom `a -> String` conversion.
+
+-}
+expect : Printer a -> String -> (() -> a) -> Test
+expect printer name fn =
+    PureTest name [] (\() -> printer (fn ()))
+
+
+{-| Add scrubbers to a test for non-deterministic output.
+
+    Snapshot.test "log entry" (\() -> formatLog entry)
+        |> Snapshot.withScrubbers [ Scrubber.timestamp ]
+
+    Snapshot.json 2 "api response" (\() -> encodeResponse resp)
+        |> Snapshot.withScrubbers [ Scrubber.guid, Scrubber.timestamp ]
+
+Scrubbers run after printing, replacing patterns like timestamps
+and GUIDs with stable placeholders.
+
+-}
+withScrubbers : List Scrubber -> Test -> Test
+withScrubbers scrubbers testCase =
+    case testCase of
+        PureTest name existingScrubbers fn ->
+            PureTest name (existingScrubbers ++ scrubbers) fn
+
+        TaskTest name existingScrubbers task ->
+            TaskTest name (existingScrubbers ++ scrubbers) task
+
+
+{-| Create a BackendTask-powered snapshot test for string output.
+
+    Snapshot.taskTest "elm.json deps" <|
+        File.rawFile "elm.json"
+            |> BackendTask.allowFatal
+
+Use this for tests that need IO (file reading, HTTP, etc).
+
+-}
 taskTest : String -> BackendTask FatalError String -> Test
 taskTest name task =
-    TaskTest name task
+    TaskTest name [] task
+
+
+{-| Create a BackendTask-powered snapshot test for JSON values.
+
+    Snapshot.taskJson 2 "api response" <|
+        Http.get url decoder
+            |> BackendTask.allowFatal
+
+-}
+taskJson : Int -> String -> BackendTask FatalError Encode.Value -> Test
+taskJson indent name task =
+    TaskTest name [] (BackendTask.map (Printer.json indent) task)
+
+
+{-| Create a BackendTask-powered snapshot test with a custom printer.
+
+    Snapshot.taskExpect myPrinter "fetched data" <|
+        fetchData
+            |> BackendTask.allowFatal
+
+-}
+taskExpect : Printer a -> String -> BackendTask FatalError a -> Test
+taskExpect printer name task =
+    TaskTest name [] (BackendTask.map printer task)
 
 
 type alias TestResult =
@@ -91,15 +221,15 @@ program =
 runTest : CliOptions -> Test -> BackendTask FatalError TestResult
 runTest options testCase =
     case testCase of
-        PureTest name fn ->
-            runTestWithReceived options name (BackendTask.succeed (fn ()))
+        PureTest name scrubbers fn ->
+            runTestWithReceived options name scrubbers (BackendTask.succeed (fn ()))
 
-        TaskTest name task ->
-            runTestWithReceived options name task
+        TaskTest name scrubbers task ->
+            runTestWithReceived options name scrubbers task
 
 
-runTestWithReceived : CliOptions -> String -> BackendTask FatalError String -> BackendTask FatalError TestResult
-runTestWithReceived options name receivedTask =
+runTestWithReceived : CliOptions -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
+runTestWithReceived options name scrubbers receivedTask =
     let
         approvedPath =
             snapshotPath name ".approved"
@@ -117,10 +247,18 @@ runTestWithReceived options name receivedTask =
 
                 NoApprove ->
                     False
+
+        applyScrubbers : String -> String
+        applyScrubbers input =
+            List.foldl (\scrubber acc -> scrubber acc) input scrubbers
     in
     receivedTask
         |> BackendTask.andThen
-            (\received ->
+            (\rawReceived ->
+                let
+                    received =
+                        applyScrubbers rawReceived
+                in
                 File.rawFile approvedPath
                     |> BackendTask.map Just
                     |> BackendTask.onError (\_ -> BackendTask.succeed Nothing)

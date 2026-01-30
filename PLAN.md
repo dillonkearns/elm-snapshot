@@ -55,10 +55,10 @@ Use elm-pages Script as the meta-framework. This gives us:
 
 | Mode | Use Case | API |
 |------|----------|-----|
-| **Pure** | Encoders, view functions, data transformations | `Snapshot.test : String -> (() -> String) -> Test` |
-| **BackendTask** | CLI output, generated files, external tool results | `Snapshot.taskTest : String -> BackendTask FatalError String -> Test` |
+| **Pure** | Encoders, view functions, data transformations | `Snapshot.test`, `Snapshot.json`, `Snapshot.expect` |
+| **BackendTask** | CLI output, generated files, external tool results | `Snapshot.taskTest`, `Snapshot.taskJson`, `Snapshot.taskExpect` |
 
-The framework knows which tests need IO and can handle them appropriately.
+Each mode has variants for string output (most common), JSON output (sorted keys), and custom printers. Scrubbers chain with `|> Snapshot.withScrubbers [...]`.
 
 ### 3. ApprovalTests-Style File Workflow
 
@@ -173,24 +173,34 @@ type alias Printer a = a -> String
 type alias Scrubber = String -> String
 ```
 
-#### Proposed API
+#### Idiomatic Elm API
+
+Rather than passing printer configuration objects (an OOP pattern), we use an idiomatic FP approach with specialized functions:
 
 ```elm
--- Basic test (user provides string directly - implicit identity printer)
+-- String output (most common)
 Snapshot.test : String -> (() -> String) -> Test
 
--- With explicit printer and scrubbers
-Snapshot.testWith :
-    { printer : Printer a
-    , scrubbers : List Scrubber
-    }
-    -> String
-    -> (() -> a)
-    -> Test
+-- JSON output with pretty printing (keys sorted alphabetically)
+Snapshot.json : Int -> String -> (() -> Encode.Value) -> Test
 
--- Convenience: scrubbers only (implicit identity printer)
-Snapshot.testWithScrubbers : List Scrubber -> String -> (() -> String) -> Test
+-- Custom printer
+Snapshot.expect : Printer a -> String -> (() -> a) -> Test
+
+-- Add scrubbers to any test (pipeline modifier)
+Snapshot.withScrubbers : List Scrubber -> Test -> Test
+
+-- BackendTask versions
+Snapshot.taskTest : String -> BackendTask FatalError String -> Test
+Snapshot.taskJson : Int -> String -> BackendTask FatalError Encode.Value -> Test
+Snapshot.taskExpect : Printer a -> String -> BackendTask FatalError a -> Test
 ```
+
+**Why this design?**
+- OOP frameworks use interfaces (`Printer<T>`) because languages like Java/C# don't have first-class functions
+- In Elm, `Printer a = a -> String` is just a function type - no interface wrapper needed
+- `Snapshot.json 2` is already a partially applied function - clean and composable
+- Scrubbers chain naturally with `|> Snapshot.withScrubbers [...]`
 
 #### Built-in Printers (Snapshot.Printer module)
 
@@ -199,9 +209,12 @@ Snapshot.testWithScrubbers : List Scrubber -> String -> (() -> String) -> Test
 string : Printer String
 string = identity
 
--- JSON pretty-printer with configurable indent
+-- JSON pretty-printer with sorted keys and configurable indent
 json : Int -> Printer Json.Encode.Value
-json indent value = Json.Encode.encode indent value
+json indent value = value |> sortJsonKeys |> Json.Encode.encode indent
+
+-- JSON without key sorting (rare - use when insertion order matters)
+jsonRaw : Int -> Printer Json.Encode.Value
 ```
 
 #### Built-in Scrubbers (Snapshot.Scrubber module)
@@ -261,35 +274,25 @@ module Snapshots exposing (run)
 import BackendTask exposing (BackendTask)
 import Pages.Script exposing (Script)
 import Snapshot exposing (Test)
-import Snapshot.Printer as Printer
 import Snapshot.Scrubber as Scrubber
 
 
 run : Script
 run =
     Snapshot.run
-        [ -- Simple test (implicit identity printer)
+        [ -- String output (most common)
           Snapshot.test "greeting" <|
             \() ->
                 greet "World"
 
-        -- With explicit printer for JSON
-        , Snapshot.testWith
-            { printer = Printer.json 2
-            , scrubbers = []
-            }
-            "User JSON encoding"
-            <| \() ->
+        -- JSON output with pretty printing
+        , Snapshot.json 2 "User JSON encoding" <|
+            \() ->
                 User.encode { name = "Alice", age = 30 }
 
-        -- With scrubber for timestamps
-        , Snapshot.testWith
-            { printer = Printer.string
-            , scrubbers = [ Scrubber.timestamp ]
-            }
-            "Log entry"
-            <| \() ->
-                formatLogEntry entry
+        -- String test with scrubber for timestamps
+        , Snapshot.test "Log entry" (\() -> formatLogEntry entry)
+            |> Snapshot.withScrubbers [ Scrubber.timestamp ]
 
         -- Including inputs in output for context
         , Snapshot.test "process order" <|
@@ -298,7 +301,7 @@ run =
                     order = { items = [...], customer = ... }
                     result = processOrder order
                 in
-                -- Printer shows both input and output
+                -- Show both input and output
                 "Input:\n" ++ Order.toString order ++
                 "\n\nOutput:\n" ++ Result.toString result
 
@@ -308,7 +311,7 @@ run =
                 [ "--report=json" ]
                 |> BackendTask.map .stdout
 
-        -- Grouped tests
+        -- Grouped tests (Phase 6)
         , Snapshot.describe "Date formatting"
             [ Snapshot.test "ISO format" <|
                 \() -> Date.toIsoString sampleDate
@@ -324,23 +327,27 @@ run =
 Snapshot
     run : List Test -> Script
     test : String -> (() -> String) -> Test
-    testWith : { printer : a -> String, scrubbers : List Scrubber } -> String -> (() -> a) -> Test
+    json : Int -> String -> (() -> Encode.Value) -> Test
+    expect : Printer a -> String -> (() -> a) -> Test
     taskTest : String -> BackendTask FatalError String -> Test
-    taskTestWith : { printer : a -> String, scrubbers : List Scrubber } -> String -> BackendTask FatalError a -> Test
-    describe : String -> List Test -> Test
+    taskJson : Int -> String -> BackendTask FatalError Encode.Value -> Test
+    taskExpect : Printer a -> String -> BackendTask FatalError a -> Test
+    withScrubbers : List Scrubber -> Test -> Test
+    describe : String -> List Test -> Test  -- Phase 6
 
 Snapshot.Printer
-    string : String -> String          -- identity
-    json : Int -> Json.Value -> String -- pretty-print with indent
+    type alias Printer a = a -> String
+    string : Printer String                -- identity
+    json : Int -> Printer Encode.Value     -- pretty-print with sorted keys
+    jsonRaw : Int -> Printer Encode.Value  -- pretty-print without sorting
 
 Snapshot.Scrubber
+    type alias Scrubber = String -> String
     regex : String -> String -> Scrubber
     guid : Scrubber
     timestamp : Scrubber
+    all : List Scrubber -> Scrubber
     custom : (String -> String) -> Scrubber
-
-Snapshot.Internal
-    -- Implementation details, not exposed
 ```
 
 ---
@@ -526,17 +533,22 @@ elm-pages run tests/Snapshots.elm --list
 
 **Deliverable**: Can snapshot CLI output, file contents, etc.
 
-### Phase 5: Printers & Scrubbers
+### Phase 5: Printers & Scrubbers ✅
 
 **Goal**: Output transformation pipeline
 
-- [ ] Define `Printer` and `Scrubber` types
-- [ ] Implement `Snapshot.testWith`
-- [ ] Built-in `Printer.json` (pretty-print with configurable indent)
-- [ ] Built-in `Printer.string` (identity)
-- [ ] Built-in `Scrubber.regex` for pattern replacement
-- [ ] Built-in `Scrubber.guid` for GUID normalization
-- [ ] Built-in `Scrubber.timestamp` for date/time normalization
+- [x] Define `Printer` and `Scrubber` types
+- [x] Implement idiomatic API: `Snapshot.json`, `Snapshot.expect`, `Snapshot.withScrubbers`
+- [x] Implement BackendTask variants: `Snapshot.taskJson`, `Snapshot.taskExpect`
+- [x] Built-in `Printer.json` (pretty-print with sorted keys)
+- [x] Built-in `Printer.jsonRaw` (pretty-print without sorting)
+- [x] Built-in `Printer.string` (identity)
+- [x] Built-in `Scrubber.regex` for pattern replacement
+- [x] Built-in `Scrubber.guid` for GUID normalization (preserves referential equality)
+- [x] Built-in `Scrubber.timestamp` for ISO 8601 date/time normalization
+- [x] Built-in `Scrubber.all` to compose multiple scrubbers
+
+**API Evolution**: Refactored from OOP-style `testWith { printer = ... }` to idiomatic Elm functions (`Snapshot.json`, `Snapshot.expect`) with pipeline scrubber composition (`|> Snapshot.withScrubbers`).
 
 **Deliverable**: Can handle JSON formatting, timestamps, etc.
 
