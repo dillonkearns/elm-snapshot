@@ -35,8 +35,8 @@ Edit `snapshot-tests/src/Snapshots.elm` to add your tests.
 
 ## Examples
 
-- **[minimal](examples/minimal/)** - Bare-bones setup showing the simplest possible snapshot test
-- **[log-formatter](examples/log-formatter/)** - Fuller example demonstrating scrubbers, test grouping with `describe`, and multiple test files
+- **[minimal](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/minimal)** - Bare-bones setup showing the simplest possible snapshot test
+- **[log-formatter](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/log-formatter)** - Fuller example demonstrating scrubbers, test grouping with `describe`, and multiple test files
 
 ## About elm-pages Scripts
 
@@ -204,9 +204,9 @@ The `snapshots/` directory contains:
 
 ## Modules
 
-- [`Snapshot`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/latest/Snapshot) - Core API for creating and running tests
-- [`Snapshot.Printer`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/latest/Snapshot-Printer) - Convert values to strings
-- [`Snapshot.Scrubber`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/latest/Snapshot-Scrubber) - Clean non-deterministic output
+- [`Snapshot`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot/) - Core API for creating and running tests
+- [`Snapshot.Printer`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot-Printer/) - Convert values to strings
+- [`Snapshot.Scrubber`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot-Scrubber/) - Clean non-deterministic output
 
 ## Inspiration
 

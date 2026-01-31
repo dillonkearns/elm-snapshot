@@ -1,18 +1,4 @@
-module Snapshot exposing
-    ( Test
-    , run
-    , test
-    , json
-    , custom
-    , taskTest
-    , taskJson
-    , taskCustom
-    , withScrubbers
-    , describe
-    , only
-    , skip
-    , todo
-    )
+module Snapshot exposing (Test, run, test, json, custom, taskTest, taskJson, taskCustom, withScrubbers, describe, only, skip, todo)
 
 {-| Snapshot testing framework for Elm.
 
@@ -361,32 +347,32 @@ run scriptName tests =
             else
                 -- First check for duplicate test names
                 case findDuplicates testNames of
-                firstDuplicate :: _ ->
-                    BackendTask.fail
-                        (FatalError.fromString
-                            ("Duplicate test name: \""
-                                ++ firstDuplicate
-                                ++ "\"\n\nEach snapshot test must have a unique name."
-                            )
-                        )
-
-                [] ->
-                    if options.list then
-                        listTests scriptName flattenedTests
-
-                    else
-                        -- Run tests and check for obsolete/untracked snapshots
-                        BackendTask.map3 (\a b c -> ( a, b, c ))
-                            (flattenedTests
-                                |> List.map (runFlatTest scriptName options hasOnly)
-                                |> BackendTask.combine
-                            )
-                            (findObsoleteSnapshots scriptName testNames)
-                            (findUntrackedSnapshots scriptName testNames)
-                            |> BackendTask.andThen
-                                (\( results, obsolete, untracked ) ->
-                                    reportResultsWithObsolete scriptName options results obsolete untracked
+                    firstDuplicate :: _ ->
+                        BackendTask.fail
+                            (FatalError.fromString
+                                ("Duplicate test name: \""
+                                    ++ firstDuplicate
+                                    ++ "\"\n\nEach snapshot test must have a unique name."
                                 )
+                            )
+
+                    [] ->
+                        if options.list then
+                            listTests scriptName flattenedTests
+
+                        else
+                            -- Run tests and check for obsolete/untracked snapshots
+                            BackendTask.map3 (\a b c -> ( a, b, c ))
+                                (flattenedTests
+                                    |> List.map (runFlatTest scriptName options hasOnly)
+                                    |> BackendTask.combine
+                                )
+                                (findObsoleteSnapshots scriptName testNames)
+                                (findUntrackedSnapshots scriptName)
+                                |> BackendTask.andThen
+                                    (\( results, obsolete, untracked ) ->
+                                        reportResultsWithObsolete scriptName options results obsolete untracked
+                                    )
         )
 
 
@@ -469,8 +455,8 @@ snapshotBasePath scriptName testName =
 
 {-| Find .approved files that exist but aren't tracked by git.
 -}
-findUntrackedSnapshots : String -> List String -> BackendTask FatalError (List String)
-findUntrackedSnapshots scriptName _ =
+findUntrackedSnapshots : String -> BackendTask FatalError (List String)
+findUntrackedSnapshots scriptName =
     let
         snapshotDir =
             "snapshots/" ++ sanitizeName scriptName ++ "/"
@@ -740,7 +726,7 @@ runTestWithReceived scriptName options name extension scrubbers receivedTask =
                                         writeApprovedFile approvedPath received
                                             |> BackendTask.andThen
                                                 (\_ ->
-                                                    deleteReceivedFile receivedPath
+                                                    deleteReceivedFile
                                                 )
                                             |> BackendTask.map
                                                 (\_ ->
@@ -793,8 +779,8 @@ writeApprovedFile path content =
         |> BackendTask.allowFatal
 
 
-deleteReceivedFile : String -> BackendTask FatalError ()
-deleteReceivedFile path =
+deleteReceivedFile : BackendTask FatalError ()
+deleteReceivedFile =
     BackendTask.succeed ()
 
 
@@ -1032,6 +1018,7 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
 
                 Nothing ->
                     BackendTask.succeed ()
+
         -- Extract FatalErrors from failing tests
         fatalErrors =
             failing
