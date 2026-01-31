@@ -7,6 +7,8 @@ This script creates the snapshot-tests folder with minimal setup:
   - snapshot-tests/package.json
   - snapshot-tests/elm.json
   - snapshot-tests/src/Snapshots.elm
+  - snapshot-tests/.gitignore
+  - snapshots/.gitignore
 
 Run with:
 
@@ -46,6 +48,22 @@ run =
                     |> BackendTask.allowFatal
                 )
             |> Script.doThen (Script.log "  Created snapshot-tests/src/Snapshots.elm")
+            |> Script.doThen
+                (Script.writeFile
+                    { path = "snapshot-tests/.gitignore"
+                    , body = snapshotTestsGitignore
+                    }
+                    |> BackendTask.allowFatal
+                )
+            |> Script.doThen (Script.log "  Created snapshot-tests/.gitignore")
+            |> Script.doThen
+                (Script.writeFile
+                    { path = "snapshots/.gitignore"
+                    , body = snapshotsGitignore
+                    }
+                    |> BackendTask.allowFatal
+                )
+            |> Script.doThen (Script.log "  Created snapshots/.gitignore")
             |> Script.doThen
                 (Script.log
                     """
@@ -148,6 +166,24 @@ snapshotTestsElmJson =
         "indirect": {}
     }
 }
+"""
+
+
+snapshotTestsGitignore : String
+snapshotTestsGitignore =
+    """# Build artifacts
+elm-stuff/
+node_modules/
+.elm-pages/
+"""
+
+
+snapshotsGitignore : String
+snapshotsGitignore =
+    """# Ignore .received files - these are generated on test failure
+# and should not be committed to source control.
+# Only .approved files should be committed.
+*.received.*
 """
 
 
