@@ -37,6 +37,7 @@ Edit `snapshot-tests/src/Snapshots.elm` to add your tests.
 
 - **[minimal](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/minimal)** - Bare-bones setup showing the simplest possible snapshot test
 - **[log-formatter](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/log-formatter)** - Fuller example demonstrating scrubbers, test grouping with `describe`, and multiple test files
+- **[features](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/features)** - Advanced example using `Printer.elm` to snapshot complex Elm data structures
 
 ## About elm-pages Scripts
 
@@ -192,27 +193,30 @@ Snapshot.custom xmlPrinter "config xml" <|
 
 ```bash
 # Run all tests
-elm-pages run Snapshots.elm
+elm-pages run src/Snapshots.elm
 
 # Approve all new/changed snapshots
-elm-pages run Snapshots.elm --approve
+elm-pages run src/Snapshots.elm --approve
 
 # Approve a specific test
-elm-pages run Snapshots.elm --approve-only "test name"
+elm-pages run src/Snapshots.elm --approve-only "test name"
 
 # CI mode (compact output, strict)
-elm-pages run Snapshots.elm --ci
+elm-pages run src/Snapshots.elm --ci
 
 # List all test names
-elm-pages run Snapshots.elm --list
+elm-pages run src/Snapshots.elm --list
 
 # Remove obsolete snapshots
-elm-pages run Snapshots.elm --prune
+elm-pages run src/Snapshots.elm --prune
 
 # Open diff tool for failures
-elm-pages run Snapshots.elm --reporter=code      # VS Code
-elm-pages run Snapshots.elm --reporter=opendiff  # macOS FileMerge
-elm-pages run Snapshots.elm --reporter=meld      # Meld
+elm-pages run src/Snapshots.elm --reporter=code      # VS Code
+elm-pages run src/Snapshots.elm --reporter=opendiff  # macOS FileMerge
+elm-pages run src/Snapshots.elm --reporter=meld      # Meld
+elm-pages run src/Snapshots.elm --reporter=ksdiff    # Kaleidoscope
+elm-pages run src/Snapshots.elm --reporter=kdiff3    # KDiff3
+elm-pages run src/Snapshots.elm --reporter=diff      # Unix diff
 ```
 
 ## File Structure
@@ -229,14 +233,14 @@ my-project/
 │       └── Snapshots.elm     # Your snapshot tests
 ├── snapshots/                # Generated (commit to git)
 │   └── Snapshots/
-│       ├── greeting.approved
-│       └── user_data.approved
+│       ├── greeting.approved.txt
+│       └── user_data.approved.json
 └── elm.json                  # Main project
 ```
 
 The `snapshots/` directory contains:
-- `.approved` files - The golden master (commit these)
-- `.received` files - Actual output on failure (gitignore these)
+- `.approved.<ext>` files - The golden master (commit these)
+- `.received.<ext>` files - Actual output on failure (gitignore these)
 
 ## Modules
 

@@ -70,7 +70,7 @@ string =
 
 {-| JSON pretty-printer with sorted keys and 2-space indentation.
 
-    Snapshot.custom Printer.json "user data" <|
+    Snapshot.json "user data" <|
         \() -> User.encode user
 
 **Keys are sorted alphabetically** at all nesting levels for deterministic
@@ -239,11 +239,15 @@ plainValueToString : ElmValue.PlainValue -> String
 plainValueToString plainValue =
     case plainValue of
         ElmValue.ElmString str ->
-            if String.contains "\n" str then
-                "\"\"\"" ++ str ++ "\"\"\""
-
-            else
-                "\"" ++ String.replace "\"" "\\\"" str ++ "\""
+            "\""
+                ++ (str
+                        |> String.replace "\\" "\\\\"
+                        |> String.replace "\"" "\\\""
+                        |> String.replace "\n" "\\n"
+                        |> String.replace "\t" "\\t"
+                        |> String.replace "\u{000D}" "\\r"
+                   )
+                ++ "\""
 
         ElmValue.ElmChar char ->
             "'" ++ String.fromChar char ++ "'"

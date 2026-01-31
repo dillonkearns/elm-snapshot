@@ -392,7 +392,7 @@ Supports CLI options:
   - `--ci` - Compact output for CI environments
   - `--list` - List all test names without running
   - `--prune` - Remove obsolete snapshot files
-  - `--reporter code|opendiff|meld` - Open diff tool for failures
+  - `--reporter <tool>` - Open diff tool for failures (code, opendiff, meld, ksdiff, kdiff3, diff, or any command)
 
 -}
 run : String -> List Test -> Script
@@ -798,7 +798,7 @@ runTestWithReceived scriptName options name extension scrubbers receivedTask =
                                         writeApprovedFile approvedPath received
                                             |> BackendTask.andThen
                                                 (\_ ->
-                                                    deleteReceivedFile
+                                                    deleteReceivedFile receivedPath
                                                 )
                                             |> BackendTask.map
                                                 (\_ ->
@@ -851,9 +851,9 @@ writeApprovedFile path content =
         |> BackendTask.allowFatal
 
 
-deleteReceivedFile : BackendTask FatalError ()
-deleteReceivedFile =
-    BackendTask.succeed ()
+deleteReceivedFile : String -> BackendTask FatalError ()
+deleteReceivedFile path =
+    Script.exec "rm" [ "-f", path ]
 
 
 snapshotPath : String -> String -> String -> String -> String
@@ -891,6 +891,163 @@ sanitizeName name =
 
 reportResultsWithObsolete : String -> CliOptions -> List TestResult -> List String -> List String -> BackendTask FatalError ()
 reportResultsWithObsolete scriptName options results obsoleteSnapshots untrackedSnapshots =
+    let
+        failing =
+            List.filter isFailing results
+
+        skipped =
+            List.filter (\r -> r.outcome == Skipped) results
+
+        todos =
+            List.filter
+                (\r ->
+                    case r.outcome of
+                        TodoOutcome _ ->
+                            True
+
+                        _ ->
+                            False
+                )
+                results
+
+        obsoleteCount =
+            List.length obsoleteSnapshots
+
+        skippedCount =
+            List.length skipped
+
+        todoCount =
+            List.length todos
+
+        -- Prune obsolete snapshots if requested
+        pruneTask =
+            if options.prune && obsoleteCount > 0 then
+                obsoleteSnapshots
+                    |> List.map deleteFile
+                    |> BackendTask.combine
+                    |> BackendTask.map (\_ -> ())
+
+            else
+                BackendTask.succeed ()
+
+        -- Open diff tool for failures (both mismatches and new snapshots)
+        -- Use sequence (not combine) to run diff tools one at a time, since GUI diff tools
+        -- like meld often have single-instance behavior that breaks with parallel launching
+        reporterTask =
+            case options.reporter of
+                Just reporterName ->
+                    failing
+                        |> List.filterMap
+                            (\result ->
+                                case result.outcome of
+                                    FailMismatch _ ->
+                                        Just
+                                            (openDiffTool reporterName
+                                                ( snapshotPath scriptName result.name ".approved" result.extension
+                                                , snapshotPath scriptName result.name ".received" result.extension
+                                                )
+                                            )
+
+                                    FailNew _ ->
+                                        let
+                                            approvedPath =
+                                                snapshotPath scriptName result.name ".approved" result.extension
+
+                                            receivedPath =
+                                                snapshotPath scriptName result.name ".received" result.extension
+                                        in
+                                        -- Create empty .approved file first so diff tool has something to compare against
+                                        Just
+                                            (writeApprovedFile approvedPath ""
+                                                |> BackendTask.andThen (\_ -> openDiffTool reporterName ( approvedPath, receivedPath ))
+                                            )
+
+                                    _ ->
+                                        Nothing
+                            )
+                        |> BackendTask.sequence
+                        |> BackendTask.map (\_ -> ())
+
+                Nothing ->
+                    BackendTask.succeed ()
+
+        -- Extract FatalErrors from failing tests
+        fatalErrors =
+            failing
+                |> List.filterMap
+                    (\result ->
+                        case result.outcome of
+                            FailFatalError err ->
+                                Just err
+
+                            _ ->
+                                Nothing
+                    )
+
+        output =
+            formatHumanOutput scriptName options results obsoleteSnapshots untrackedSnapshots
+    in
+    pruneTask
+        |> BackendTask.andThen (\_ -> reporterTask)
+        |> BackendTask.andThen (\_ -> Script.log output)
+        |> BackendTask.andThen
+            (\_ ->
+                let
+                    isIncomplete =
+                        skippedCount > 0 || todoCount > 0
+                in
+                if List.isEmpty failing && not isIncomplete then
+                    BackendTask.succeed ()
+
+                else if not (List.isEmpty failing) then
+                    -- If there's exactly one FatalError, re-throw it so elm-pages prints the full message
+                    case fatalErrors of
+                        [ singleError ] ->
+                            BackendTask.fail singleError
+
+                        _ ->
+                            BackendTask.fail
+                                (FatalError.build
+                                    { title = "Snapshot Tests Failed"
+                                    , body = String.fromInt (List.length failing) ++ " test(s) failed"
+                                    }
+                                )
+
+                else
+                    -- Incomplete test run (skipped or todo tests present)
+                    BackendTask.fail
+                        (FatalError.build
+                            { title = "Incomplete Test Run"
+                            , body =
+                                "Test run was incomplete: "
+                                    ++ (if skippedCount > 0 then
+                                            String.fromInt skippedCount ++ " skipped"
+
+                                        else
+                                            ""
+                                       )
+                                    ++ (if skippedCount > 0 && todoCount > 0 then
+                                            ", "
+
+                                        else
+                                            ""
+                                       )
+                                    ++ (if todoCount > 0 then
+                                            String.fromInt todoCount ++ " todo"
+
+                                        else
+                                            ""
+                                       )
+                                    ++ "\n\nThis is treated as a failure to prevent accidentally committing only/skip/todo."
+                            }
+                        )
+            )
+
+
+{-| Format output in human-readable format (default).
+-}
+formatHumanOutput : String -> CliOptions -> List TestResult -> List String -> List String -> String
+formatHumanOutput scriptName options results obsoleteSnapshots untrackedSnapshots =
     let
         passing =
             List.filter (\r -> r.outcome == Pass) results
@@ -1035,130 +1192,8 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
 
             else
                 ""
-
-        output =
-            String.join "\n" resultLines ++ "\n\n" ++ summary ++ obsoleteWarning ++ untrackedWarning ++ noApprovedNote
-
-        -- Prune obsolete snapshots if requested
-        pruneTask =
-            if options.prune && obsoleteCount > 0 then
-                obsoleteSnapshots
-                    |> List.map deleteFile
-                    |> BackendTask.combine
-                    |> BackendTask.map (\_ -> ())
-
-            else
-                BackendTask.succeed ()
-
-        -- Open diff tool for failures (both mismatches and new snapshots)
-        -- Use sequence (not combine) to run diff tools one at a time, since GUI diff tools
-        -- like meld often have single-instance behavior that breaks with parallel launching
-        reporterTask =
-            case options.reporter of
-                Just reporterName ->
-                    failing
-                        |> List.filterMap
-                            (\result ->
-                                case result.outcome of
-                                    FailMismatch _ ->
-                                        Just
-                                            (openDiffTool reporterName
-                                                ( snapshotPath scriptName result.name ".approved" result.extension
-                                                , snapshotPath scriptName result.name ".received" result.extension
-                                                )
-                                            )
-
-                                    FailNew _ ->
-                                        let
-                                            approvedPath =
-                                                snapshotPath scriptName result.name ".approved" result.extension
-
-                                            receivedPath =
-                                                snapshotPath scriptName result.name ".received" result.extension
-                                        in
-                                        -- Create empty .approved file first so diff tool has something to compare against
-                                        Just
-                                            (writeApprovedFile approvedPath ""
-                                                |> BackendTask.andThen (\_ -> openDiffTool reporterName ( approvedPath, receivedPath ))
-                                            )
-
-                                    _ ->
-                                        Nothing
-                            )
-                        |> BackendTask.sequence
-                        |> BackendTask.map (\_ -> ())
-
-                Nothing ->
-                    BackendTask.succeed ()
-
-        -- Extract FatalErrors from failing tests
-        fatalErrors =
-            failing
-                |> List.filterMap
-                    (\result ->
-                        case result.outcome of
-                            FailFatalError err ->
-                                Just err
-
-                            _ ->
-                                Nothing
-                    )
     in
-    pruneTask
-        |> BackendTask.andThen (\_ -> reporterTask)
-        |> BackendTask.andThen (\_ -> Script.log output)
-        |> BackendTask.andThen
-            (\_ ->
-                let
-                    isIncomplete =
-                        skippedCount > 0 || todoCount > 0
-                in
-                if List.isEmpty failing && not isIncomplete then
-                    BackendTask.succeed ()
-
-                else if not (List.isEmpty failing) then
-                    -- If there's exactly one FatalError, re-throw it so elm-pages prints the full message
-                    case fatalErrors of
-                        [ singleError ] ->
-                            BackendTask.fail singleError
-
-                        _ ->
-                            BackendTask.fail
-                                (FatalError.build
-                                    { title = "Snapshot Tests Failed"
-                                    , body = String.fromInt (List.length failing) ++ " test(s) failed"
-                                    }
-                                )
-
-                else
-                    -- Incomplete test run (skipped or todo tests present)
-                    BackendTask.fail
-                        (FatalError.build
-                            { title = "Incomplete Test Run"
-                            , body =
-                                "Test run was incomplete: "
-                                    ++ (if skippedCount > 0 then
-                                            String.fromInt skippedCount ++ " skipped"
-
-                                        else
-                                            ""
-                                       )
-                                    ++ (if skippedCount > 0 && todoCount > 0 then
-                                            ", "
-
-                                        else
-                                            ""
-                                       )
-                                    ++ (if todoCount > 0 then
-                                            String.fromInt todoCount ++ " todo"
-
-                                        else
-                                            ""
-                                       )
-                                    ++ "\n\nThis is treated as a failure to prevent accidentally committing only/skip/todo."
-                            }
-                        )
-            )
+    String.join "\n" resultLines ++ "\n\n" ++ summary ++ obsoleteWarning ++ untrackedWarning ++ noApprovedNote
 
 
 {-| Open a diff tool to compare two files.
