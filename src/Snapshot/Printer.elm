@@ -144,12 +144,23 @@ jsonValueDecoder =
         ]
 
 
-{-| Pretty-prints any Elm value using elm-format style.
+{-| Pretty-prints any Elm value using elm-format style. This requires
+`Debug.toString` to be passed as the first argument.
 
 Since published packages cannot use `Debug.toString` directly, you must pass
 it in as the first argument:
 
     Snapshot.custom (Printer.elm Debug.toString) "user model" <|
+        \() -> model.user
+
+A common pattern is to create a helper in your test file:
+
+    elmPrinter : Printer a
+    elmPrinter =
+        Printer.elm Debug.toString
+
+    -- Then use it in your tests:
+    Snapshot.custom elmPrinter "user model" <|
         \() -> model.user
 
 The output is formatted as valid Elm syntax, making diffs easy to read.
@@ -315,4 +326,21 @@ sequenceTypeToString sequenceType values =
 
 join : String -> String -> String -> List String -> String
 join prefix separator suffix items =
-    prefix ++ String.join separator items ++ suffix
+    let
+        singleLine =
+            prefix ++ String.join separator items ++ suffix
+
+        -- Use multi-line format if single line would be too long (> 80 chars)
+        -- This improves readability and makes diffs easier to review
+        maxLineLength =
+            80
+    in
+    if String.length singleLine > maxLineLength && List.length items > 1 then
+        prefix
+            ++ "\n    "
+            ++ String.join (separator ++ "\n    ") items
+            ++ "\n"
+            ++ suffix
+
+    else
+        singleLine
