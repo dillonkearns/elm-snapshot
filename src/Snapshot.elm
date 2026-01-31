@@ -1208,26 +1208,26 @@ openDiffTool : String -> ( String, String ) -> BackendTask FatalError ()
 openDiffTool reporter ( approvedPath, receivedPath ) =
     case reporter of
         "code" ->
-            Script.exec "code" [ "--diff", "--wait", approvedPath, receivedPath ]
+            Script.exec "code" [ "--diff", "--wait", receivedPath, approvedPath ]
 
         "opendiff" ->
-            Script.exec "opendiff" [ "-W", approvedPath, receivedPath ]
+            Script.exec "opendiff" [ "-W", receivedPath, approvedPath ]
 
         "meld" ->
-            Script.exec "meld" [ approvedPath, receivedPath ]
+            Script.exec "meld" [ receivedPath, approvedPath ]
 
         "ksdiff" ->
-            Script.exec "ksdiff" [ "--wait", approvedPath, receivedPath ]
+            Script.exec "ksdiff" [ "--wait", receivedPath, approvedPath ]
 
         "kdiff3" ->
-            Script.exec "kdiff3" [ approvedPath, receivedPath ]
+            Script.exec "kdiff3" [ receivedPath, approvedPath ]
 
         "diff" ->
-            Script.exec "diff" [ "-u", approvedPath, receivedPath ]
+            Script.exec "diff" [ "-u", receivedPath, approvedPath ]
 
         other ->
             -- Try to use it as a command directly
-            Script.exec other [ approvedPath, receivedPath ]
+            Script.exec other [ receivedPath, approvedPath ]
 
 
 deleteFile : String -> BackendTask FatalError ()
@@ -1331,7 +1331,7 @@ formatDiff expected received =
             String.lines received
 
         changes =
-            Diff.diff expectedLines receivedLines
+            Diff.diff receivedLines expectedLines
     in
     changes
         |> List.concatMap formatChange
