@@ -1,22 +1,17 @@
 # elm-snapshot
 
-Snapshot testing for elm-pages scripts - capture output once, verify it forever.
+Approve output once to save you from unexpected changes.
 
-## What is Snapshot Testing?
+![Failing tests showing diff](https://github.com/dillonkearns/elm-snapshot/blob/main/documentation/images/failing-tests.png?raw=true)
 
-Snapshot testing (also called approval testing) captures your code's output and saves it as a "golden master." On subsequent runs, the output is compared against this approved snapshot. If they match, the test passes. If they differ, you review the change and either fix your code or approve the new output.
 
-This approach is particularly powerful for:
+## How It Works
 
-- **Complex output** - Testing formatters, encoders, or views where manually writing expectations is tedious
-- **Legacy code** - Capturing existing behavior before refactoring
-- **Visual review** - When it's easier to look at output than to specify it programmatically
+1. **Run your test** - elm-snapshot captures the output
+2. **Review the result** - approve it as your expected "golden master"
+3. **Future runs compare** - if output changes, you see a diff and decide: fix the code or approve the new output
 
-## When to Use Snapshot Testing
-
-**Good fit:** Formatters, encoders, code generators, complex transformations, characterizing legacy code
-
-**Consider alternatives:** Simple pure functions (elm-test), behavior testing, frequently-changing output
+This approach captures human judgment about what correct output looks like. Instead of writing assertions by hand, you verify actual output once and let the tool enforce it forever.
 
 ## Design Goals
 
@@ -31,11 +26,9 @@ This approach is particularly powerful for:
 elm install dillonkearns/elm-snapshot
 ```
 
-**Prerequisite:** This package requires [elm-pages](https://elm-pages.com/) v10+. Snapshot tests run as elm-pages scripts.
-
 ## About elm-pages Scripts
 
-Snapshot tests run as [elm-pages scripts](https://elm-pages.com/docs/elm-pages-scripts) - standalone Elm programs that can perform IO (file operations, HTTP, etc.).
+**Prerequisite:** This project is an Elm package which gives you an API similar to `elm-test` for defining test suites. Rather than running with `elm-test`, however, you run your snapshot test files with the [`elm-pages`](https://elm-pages.com/) CLI via the `elm-pages run` command. Snapshot tests run as [elm-pages scripts](https://elm-pages.com/docs/elm-pages-scripts) - standalone Elm programs that can perform file operations, HTTP, etc.
 
 **Why elm-pages?** Standard Elm test frameworks cannot write to the filesystem. elm-pages scripts bridge this gap.
 
@@ -45,26 +38,25 @@ Snapshot tests run as [elm-pages scripts](https://elm-pages.com/docs/elm-pages-s
 
 You do NOT need a full elm-pages app - just the script runner (`npm install elm-pages`).
 
-## Setting Up a New Project
+## Quick Start
 
-### Option 1: Quick Start with Remote Script (Recommended)
+### Init Via Remote Script
 
-The fastest way to add snapshot testing to an existing project:
+First, install the `elm-pages` CLI tool (recommended: add it to your project's package.json)
 
 ```bash
 npm install --save-dev elm-pages
-npx elm-pages run github:dillonkearns/elm-snapshot:script/src/Init.elm
 ```
 
-This creates a `snapshot-tests/` folder with the elm-pages script project. Then:
+Then run the elm-pages script Init script from this repo remotely. 
+This creates a `snapshot-tests/` folder with the elm-pages script project.
 
-1. Add scripts to your `package.json`:
-   ```json
-   "scripts": {
-     "test": "cd snapshot-tests && elm-pages run src/Snapshots.elm",
-     "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve"
-   }
-   ```
+```bash
+npx elm-pages run github:dillonkearns/elm-snapshot:script/src/Init.elm
+cd snapshot-tests && npx elm-pages run src/Snapshots.elm
+```
+
+
 2. Edit `snapshot-tests/src/Snapshots.elm` to add your tests
 
 ### Option 2: Manual Setup
