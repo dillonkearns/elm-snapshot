@@ -9,6 +9,9 @@ module Snapshot exposing
     , taskCustom
     , withScrubbers
     , describe
+    , only
+    , skip
+    , todo
     )
 
 {-| Snapshot testing framework for Elm.
@@ -37,7 +40,20 @@ An idiomatic Elm API for approval/snapshot testing.
     Snapshot.custom myPrinter "custom format" <|
         \() -> myValue
 
-@docs Test, run, test, json, custom, taskTest, taskJson, taskCustom, withScrubbers, describe
+    -- Focus on specific tests during development
+    Snapshot.only <|
+        Snapshot.test "work in progress" <|
+            \() -> newFeature
+
+    -- Skip tests temporarily
+    Snapshot.skip <|
+        Snapshot.test "broken test" <|
+            \() -> brokenCode
+
+    -- Placeholder for tests to implement later
+    Snapshot.todo "implement edge case handling"
+
+@docs Test, run, test, json, custom, taskTest, taskJson, taskCustom, withScrubbers, describe, only, skip, todo
 
 -}
 
@@ -67,6 +83,9 @@ type Test
     = PureTest String String (List Scrubber) (() -> String)
     | TaskTest String String (List Scrubber) (BackendTask FatalError String)
     | Describe String (List Test)
+    | Only Test
+    | Skip Test
+    | Todo String
 
 
 {-| Create a snapshot test that compares string output.
@@ -135,6 +154,15 @@ withScrubbers scrubbers testCase =
         Describe name tests ->
             Describe name (List.map (withScrubbers scrubbers) tests)
 
+        Only innerTest ->
+            Only (withScrubbers scrubbers innerTest)
+
+        Skip innerTest ->
+            Skip (withScrubbers scrubbers innerTest)
+
+        Todo description ->
+            Todo description
+
 
 {-| Group related tests together.
 
@@ -152,6 +180,55 @@ Snapshot files are stored in subdirectories matching the group structure.
 describe : String -> List Test -> Test
 describe name tests =
     Describe name tests
+
+
+{-| Run only this test (and any other tests marked with `only`).
+
+    Snapshot.only <|
+        Snapshot.test "focus on this" <|
+            \() -> workInProgress
+
+When any test is marked with `only`, all tests without `only` will be skipped.
+Use this during development to focus on specific tests.
+
+Note: `skip` takes precedence over `only` - a skipped test won't run even
+if it's inside an `only` block.
+
+-}
+only : Test -> Test
+only =
+    Only
+
+
+{-| Skip this test.
+
+    Snapshot.skip <|
+        Snapshot.test "broken test" <|
+            \() -> brokenCode
+
+The test will be reported as skipped but won't be executed.
+Use this to temporarily disable tests without deleting them.
+
+Note: `skip` takes precedence over `only` - a skipped test won't run even
+if it's inside an `only` block.
+
+-}
+skip : Test -> Test
+skip =
+    Skip
+
+
+{-| A placeholder for a test you intend to write later.
+
+    Snapshot.todo "handle edge case where input is empty"
+
+The test will be reported as a todo item. This is useful for jotting down
+test ideas without implementing them immediately.
+
+-}
+todo : String -> Test
+todo =
+    Todo
 
 
 {-| Create a BackendTask-powered snapshot test for string output.
@@ -207,6 +284,8 @@ type Outcome
     | FailMismatch { expected : String, received : String }
     | FailFatalError FatalError
     | Approved
+    | Skipped
+    | TodoOutcome String
 
 
 type alias CliOptions =
@@ -258,6 +337,9 @@ run scriptName tests =
 
                 testNames =
                     List.map .name flattenedTests
+
+                hasOnly =
+                    List.any (\t -> t.runStatus == OnlyTest) flattenedTests
             in
             -- First check for duplicate test names
             case findDuplicates testNames of
@@ -278,7 +360,7 @@ run scriptName tests =
                         -- Run tests and check for obsolete/untracked snapshots
                         BackendTask.map3 (\a b c -> ( a, b, c ))
                             (flattenedTests
-                                |> List.map (runFlatTest scriptName options)
+                                |> List.map (runFlatTest scriptName options hasOnly)
                                 |> BackendTask.combine
                             )
                             (findObsoleteSnapshots scriptName testNames)
@@ -395,12 +477,18 @@ findUntrackedSnapshots scriptName _ =
 -}
 flattenTest : String -> Test -> List FlatTest
 flattenTest prefix testCase =
+    flattenTestWithStatus prefix Normal testCase
+
+
+flattenTestWithStatus : String -> RunStatus -> Test -> List FlatTest
+flattenTestWithStatus prefix status testCase =
     case testCase of
         PureTest name ext scrubbers fn ->
             [ { name = prefixName prefix name
               , extension = ext
               , scrubbers = scrubbers
               , task = BackendTask.succeed (fn ())
+              , runStatus = status
               }
             ]
 
@@ -409,6 +497,7 @@ flattenTest prefix testCase =
               , extension = ext
               , scrubbers = scrubbers
               , task = task
+              , runStatus = status
               }
             ]
 
@@ -417,7 +506,36 @@ flattenTest prefix testCase =
                 newPrefix =
                     prefixName prefix groupName
             in
-            List.concatMap (flattenTest newPrefix) nestedTests
+            List.concatMap (flattenTestWithStatus newPrefix status) nestedTests
+
+        Only innerTest ->
+            -- Only upgrades Normal to OnlyTest, but Skip takes precedence
+            let
+                newStatus =
+                    case status of
+                        SkipTest ->
+                            SkipTest
+
+                        TodoTest desc ->
+                            TodoTest desc
+
+                        _ ->
+                            OnlyTest
+            in
+            flattenTestWithStatus prefix newStatus innerTest
+
+        Skip innerTest ->
+            -- Skip always wins
+            flattenTestWithStatus prefix SkipTest innerTest
+
+        Todo description ->
+            [ { name = prefixName prefix description
+              , extension = "txt"
+              , scrubbers = []
+              , task = BackendTask.succeed ""
+              , runStatus = TodoTest description
+              }
+            ]
 
 
 prefixName : String -> String -> String
@@ -434,7 +552,15 @@ type alias FlatTest =
     , extension : String
     , scrubbers : List Scrubber
     , task : BackendTask FatalError String
+    , runStatus : RunStatus
     }
+
+
+type RunStatus
+    = Normal
+    | OnlyTest
+    | SkipTest
+    | TodoTest String
 
 
 listTests : String -> List FlatTest -> BackendTask FatalError ()
@@ -484,9 +610,46 @@ program =
             )
 
 
-runFlatTest : String -> CliOptions -> FlatTest -> BackendTask FatalError TestResult
-runFlatTest scriptName options flatTest =
-    runTestWithReceived scriptName options flatTest.name flatTest.extension flatTest.scrubbers flatTest.task
+runFlatTest : String -> CliOptions -> Bool -> FlatTest -> BackendTask FatalError TestResult
+runFlatTest scriptName options hasOnly flatTest =
+    let
+        -- Determine effective run status considering the "only" filter
+        effectiveStatus =
+            case flatTest.runStatus of
+                SkipTest ->
+                    SkipTest
+
+                TodoTest desc ->
+                    TodoTest desc
+
+                OnlyTest ->
+                    OnlyTest
+
+                Normal ->
+                    if hasOnly then
+                        -- Normal tests become skipped when there are "only" tests
+                        SkipTest
+
+                    else
+                        Normal
+    in
+    case effectiveStatus of
+        SkipTest ->
+            BackendTask.succeed
+                { name = flatTest.name
+                , extension = flatTest.extension
+                , outcome = Skipped
+                }
+
+        TodoTest description ->
+            BackendTask.succeed
+                { name = flatTest.name
+                , extension = flatTest.extension
+                , outcome = TodoOutcome description
+                }
+
+        _ ->
+            runTestWithReceived scriptName options flatTest.name flatTest.extension flatTest.scrubbers flatTest.task
 
 
 runTestWithReceived : String -> CliOptions -> String -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
@@ -662,6 +825,21 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
         approved =
             List.filter (\r -> r.outcome == Approved) results
 
+        skipped =
+            List.filter (\r -> r.outcome == Skipped) results
+
+        todos =
+            List.filter
+                (\r ->
+                    case r.outcome of
+                        TodoOutcome _ ->
+                            True
+
+                        _ ->
+                            False
+                )
+                results
+
         resultLines =
             List.map (formatResult scriptName options) results
 
@@ -671,12 +849,30 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
         untrackedCount =
             List.length untrackedSnapshots
 
+        skippedCount =
+            List.length skipped
+
+        todoCount =
+            List.length todos
+
         summaryParts =
             [ String.fromInt (List.length passing) ++ " passing"
             , String.fromInt (List.length failing) ++ " failing"
             ]
                 ++ (if List.length approved > 0 then
                         [ String.fromInt (List.length approved) ++ " approved" ]
+
+                    else
+                        []
+                   )
+                ++ (if skippedCount > 0 then
+                        [ String.fromInt skippedCount ++ " skipped" ]
+
+                    else
+                        []
+                   )
+                ++ (if todoCount > 0 then
+                        [ String.fromInt todoCount ++ " todo" ]
 
                     else
                         []
@@ -897,6 +1093,12 @@ isFailing result =
         Approved ->
             False
 
+        Skipped ->
+            False
+
+        TodoOutcome _ ->
+            False
+
         FailNew _ ->
             True
 
@@ -960,6 +1162,12 @@ formatResult scriptName options result =
 
         FailFatalError _ ->
             red "✗" ++ " " ++ result.name ++ " - fatal error"
+
+        Skipped ->
+            yellow "○" ++ " " ++ result.name ++ dim " (skipped)"
+
+        TodoOutcome description ->
+            yellow "○" ++ " " ++ description ++ dim " (todo)"
 
 
 formatDiff : String -> String -> String
