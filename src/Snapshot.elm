@@ -1,4 +1,4 @@
-module Snapshot exposing (Test, run, test, json, custom, taskTest, taskJson, taskCustom, withScrubbers, describe, only, skip, todo)
+module Snapshot exposing (Test, run, test, json, custom, checkedTest, checkedJson, checkedCustom, taskTest, taskJson, taskCustom, withScrubbers, describe, only, skip, todo)
 
 {-| Snapshot testing framework for Elm.
 
@@ -26,6 +26,12 @@ An idiomatic Elm API for approval/snapshot testing.
     Snapshot.custom myPrinter "custom format" <|
         \() -> myValue
 
+    -- Checked test (fails early if Err)
+    Snapshot.checkedTest "parsed config" <|
+        \() ->
+            Config.parse rawInput
+                |> Result.map Config.toString
+
     -- Focus on specific tests during development
     Snapshot.only <|
         Snapshot.test "work in progress" <|
@@ -39,7 +45,7 @@ An idiomatic Elm API for approval/snapshot testing.
     -- Placeholder for tests to implement later
     Snapshot.todo "implement edge case handling"
 
-@docs Test, run, test, json, custom, taskTest, taskJson, taskCustom, withScrubbers, describe, only, skip, todo
+@docs Test, run, test, json, custom, checkedTest, checkedJson, checkedCustom, taskTest, taskJson, taskCustom, withScrubbers, describe, only, skip, todo
 
 -}
 
@@ -114,6 +120,72 @@ Use this when you need a custom `a -> String` conversion.
 custom : Printer a -> String -> (() -> a) -> Test
 custom printer name fn =
     PureTest name printer.extension [] (\() -> printer.print (fn ()))
+
+
+{-| Create a snapshot test that validates before snapshotting.
+
+    Snapshot.checkedTest "parsed config" <|
+        \() ->
+            Config.parse rawInput
+                |> Result.map Config.toString
+
+If the Result is `Err`, the test fails with that error message and no
+snapshot is written. If `Ok`, the value is snapshotted normally.
+
+This is useful when test setup might fail (parsing, validation, etc.)
+and you want to catch those failures before snapshotting.
+
+-}
+checkedTest : String -> (() -> Result String String) -> Test
+checkedTest name fn =
+    TaskTest name "txt" []
+        (fn ()
+            |> resultToBackendTask
+        )
+
+
+{-| Create a JSON snapshot test that validates before snapshotting.
+
+    Snapshot.checkedJson "decoded user" <|
+        \() ->
+            Json.Decode.decodeString userDecoder jsonString
+                |> Result.mapError Json.Decode.errorToString
+
+-}
+checkedJson : String -> (() -> Result String Encode.Value) -> Test
+checkedJson name fn =
+    TaskTest name Printer.json.extension []
+        (fn ()
+            |> Result.map Printer.json.print
+            |> resultToBackendTask
+        )
+
+
+{-| Create a snapshot test with a custom printer that validates before snapshotting.
+
+    Snapshot.checkedCustom xmlPrinter "parsed xml" <|
+        \() ->
+            Xml.parse rawXml
+                |> Result.mapError Xml.errorToString
+
+-}
+checkedCustom : Printer a -> String -> (() -> Result String a) -> Test
+checkedCustom printer name fn =
+    TaskTest name printer.extension []
+        (fn ()
+            |> Result.map printer.print
+            |> resultToBackendTask
+        )
+
+
+resultToBackendTask : Result String a -> BackendTask FatalError a
+resultToBackendTask result =
+    case result of
+        Ok value ->
+            BackendTask.succeed value
+
+        Err errorMessage ->
+            BackendTask.fail (FatalError.fromString errorMessage)
 
 
 {-| Add scrubbers to a test for non-deterministic output.
