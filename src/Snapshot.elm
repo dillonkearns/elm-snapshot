@@ -374,6 +374,7 @@ type ApproveMode
     = NoApprove
     | ApproveAll
     | ApproveNamed String
+    | ApprovePrompt
 
 
 isApproveOnly : ApproveMode -> Bool
@@ -403,6 +404,7 @@ allowing multiple snapshot scripts in the same project.
 Supports CLI options:
 
   - `--approve` - Approve all new/changed snapshots
+  - `--approve=prompt` - Interactive per-snapshot approval
   - `--approve-only "test name"` - Approve a specific test
   - `--ci` - Compact output for CI environments
   - `--list` - List all test names without running
@@ -415,8 +417,29 @@ run scriptName tests =
     Script.withCliOptions program
         (\options ->
             let
-                flattenedTests =
+                flattenedTestsRaw =
                     List.concatMap (flattenTest "") tests
+
+                -- Find max onlyDepth to determine which tests are "most specific"
+                -- Tests with only at a deeper level take precedence over outer only
+                maxOnlyDepth =
+                    flattenedTestsRaw
+                        |> List.map .onlyDepth
+                        |> List.maximum
+                        |> Maybe.withDefault 0
+
+                -- Apply narrowing: tests with lower onlyDepth than max are skipped
+                -- This makes inner `only` narrow scope within outer `only`
+                flattenedTests =
+                    flattenedTestsRaw
+                        |> List.map
+                            (\t ->
+                                if t.runStatus == OnlyTest && t.onlyDepth < maxOnlyDepth then
+                                    { t | runStatus = SkipTest }
+
+                                else
+                                    t
+                            )
 
                 testNames =
                     List.map .name flattenedTests
@@ -458,7 +481,7 @@ run scriptName tests =
                                 (findUntrackedSnapshots scriptName)
                                 |> BackendTask.andThen
                                     (\( results, obsolete, untracked ) ->
-                                        reportResultsWithObsolete scriptName options results obsolete untracked
+                                        reportResultsWithObsolete scriptName options hasOnly results obsolete untracked
                                     )
         )
 
@@ -568,11 +591,11 @@ findUntrackedSnapshots scriptName =
 -}
 flattenTest : String -> Test -> List FlatTest
 flattenTest prefix testCase =
-    flattenTestWithStatus prefix Normal testCase
+    flattenTestWithStatus prefix Normal 0 testCase
 
 
-flattenTestWithStatus : String -> RunStatus -> Test -> List FlatTest
-flattenTestWithStatus prefix status testCase =
+flattenTestWithStatus : String -> RunStatus -> Int -> Test -> List FlatTest
+flattenTestWithStatus prefix status onlyDepth testCase =
     case testCase of
         PureTest name ext scrubbers fn ->
             [ { name = prefixName prefix name
@@ -580,6 +603,7 @@ flattenTestWithStatus prefix status testCase =
               , scrubbers = scrubbers
               , task = BackendTask.succeed (fn ())
               , runStatus = status
+              , onlyDepth = onlyDepth
               }
             ]
 
@@ -589,6 +613,7 @@ flattenTestWithStatus prefix status testCase =
               , scrubbers = scrubbers
               , task = task
               , runStatus = status
+              , onlyDepth = onlyDepth
               }
             ]
 
@@ -597,10 +622,11 @@ flattenTestWithStatus prefix status testCase =
                 newPrefix =
                     prefixName prefix groupName
             in
-            List.concatMap (flattenTestWithStatus newPrefix status) nestedTests
+            List.concatMap (flattenTestWithStatus newPrefix status onlyDepth) nestedTests
 
         Only innerTest ->
             -- Only upgrades Normal to OnlyTest, but Skip takes precedence
+            -- Track depth so inner `only` can narrow scope within outer `only`
             let
                 newStatus =
                     case status of
@@ -612,12 +638,19 @@ flattenTestWithStatus prefix status testCase =
 
                         _ ->
                             OnlyTest
+
+                newOnlyDepth =
+                    if newStatus == OnlyTest then
+                        onlyDepth + 1
+
+                    else
+                        onlyDepth
             in
-            flattenTestWithStatus prefix newStatus innerTest
+            flattenTestWithStatus prefix newStatus newOnlyDepth innerTest
 
         Skip innerTest ->
             -- Skip always wins
-            flattenTestWithStatus prefix SkipTest innerTest
+            flattenTestWithStatus prefix SkipTest onlyDepth innerTest
 
         Todo description ->
             [ { name = prefixName prefix description
@@ -625,6 +658,7 @@ flattenTestWithStatus prefix status testCase =
               , scrubbers = []
               , task = BackendTask.succeed ""
               , runStatus = TodoTest description
+              , onlyDepth = 0
               }
             ]
 
@@ -644,6 +678,7 @@ type alias FlatTest =
     , scrubbers : List Scrubber
     , task : BackendTask FatalError String
     , runStatus : RunStatus
+    , onlyDepth : Int
     }
 
 
@@ -673,25 +708,30 @@ program =
     Program.config
         |> Program.add
             (OptionsParser.build
-                (\approveAll approveOnly ci list prune reporter ->
+                (\approveArg approveOnly ci list prune reporter ->
                     { approve =
-                        if approveAll then
-                            ApproveAll
+                        case approveArg of
+                            Just "prompt" ->
+                                ApprovePrompt
 
-                        else
-                            case approveOnly of
-                                Just name ->
-                                    ApproveNamed name
+                            Just _ ->
+                                -- --approve or --approve=anything-else means approve all
+                                ApproveAll
 
-                                Nothing ->
-                                    NoApprove
+                            Nothing ->
+                                case approveOnly of
+                                    Just name ->
+                                        ApproveNamed name
+
+                                    Nothing ->
+                                        NoApprove
                     , ci = ci
                     , list = list
                     , prune = prune
                     , reporter = reporter
                     }
                 )
-                |> OptionsParser.with (Option.flag "approve")
+                |> OptionsParser.with (Option.optionalKeywordArg "approve")
                 |> OptionsParser.with (Option.optionalKeywordArg "approve-only")
                 |> OptionsParser.with (Option.flag "ci")
                 |> OptionsParser.with (Option.flag "list")
@@ -761,6 +801,10 @@ runTestWithReceived scriptName options name extension scrubbers receivedTask =
                     name == targetName
 
                 NoApprove ->
+                    False
+
+                ApprovePrompt ->
+                    -- Don't auto-approve; prompting happens after results are collected
                     False
 
         applyScrubbers : String -> String
@@ -904,8 +948,8 @@ sanitizeName name =
         |> String.replace "*" "_"
 
 
-reportResultsWithObsolete : String -> CliOptions -> List TestResult -> List String -> List String -> BackendTask FatalError ()
-reportResultsWithObsolete scriptName options results obsoleteSnapshots untrackedSnapshots =
+reportResultsWithObsolete : String -> CliOptions -> Bool -> List TestResult -> List String -> List String -> BackendTask FatalError ()
+reportResultsWithObsolete scriptName options hasOnly results obsoleteSnapshots untrackedSnapshots =
     let
         failing =
             List.filter isFailing results
@@ -986,6 +1030,14 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
                 Nothing ->
                     BackendTask.succeed ()
 
+        -- Interactive approval prompting for --approve=prompt
+        promptTask =
+            if options.approve == ApprovePrompt then
+                promptForApprovals scriptName failing
+
+            else
+                BackendTask.succeed 0
+
         -- Extract FatalErrors from failing tests
         fatalErrors =
             failing
@@ -1000,21 +1052,29 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
                     )
 
         output =
-            formatHumanOutput scriptName options results obsoleteSnapshots untrackedSnapshots
+            formatHumanOutput scriptName options hasOnly results obsoleteSnapshots untrackedSnapshots
     in
     pruneTask
         |> BackendTask.andThen (\_ -> reporterTask)
         |> BackendTask.andThen (\_ -> Script.log output)
+        |> BackendTask.andThen (\_ -> promptTask)
         |> BackendTask.andThen
-            (\_ ->
+            (\approvedCount ->
                 let
                     isIncomplete =
                         skippedCount > 0 || todoCount > 0
-                in
-                if List.isEmpty failing && not isIncomplete then
-                    BackendTask.succeed ()
 
-                else if not (List.isEmpty failing) then
+                    remainingFailures =
+                        List.length failing - approvedCount
+                in
+                if remainingFailures <= 0 && not isIncomplete then
+                    if approvedCount > 0 then
+                        Script.log ("\n" ++ green "✓" ++ " Approved " ++ String.fromInt approvedCount ++ " snapshot(s)")
+
+                    else
+                        BackendTask.succeed ()
+
+                else if remainingFailures > 0 then
                     -- If there's exactly one FatalError, re-throw it so elm-pages prints the full message
                     case fatalErrors of
                         [ singleError ] ->
@@ -1061,8 +1121,8 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
 
 {-| Format output in human-readable format (default).
 -}
-formatHumanOutput : String -> CliOptions -> List TestResult -> List String -> List String -> String
-formatHumanOutput scriptName options results obsoleteSnapshots untrackedSnapshots =
+formatHumanOutput : String -> CliOptions -> Bool -> List TestResult -> List String -> List String -> String
+formatHumanOutput scriptName options hasOnly results obsoleteSnapshots untrackedSnapshots =
     let
         passing =
             List.filter (\r -> r.outcome == Pass) results
@@ -1088,8 +1148,19 @@ formatHumanOutput scriptName options results obsoleteSnapshots untrackedSnapshot
                 )
                 results
 
+        -- Hide passing tests by default (only show non-passing results)
+        -- This matches elm-test, Jest, and Vitest behavior
+        visibleResults =
+            if options.ci then
+                -- In CI mode, show all results
+                results
+
+            else
+                -- In normal mode, hide pure passing tests
+                List.filter (\r -> r.outcome /= Pass) results
+
         resultLines =
-            List.map (formatResult scriptName options) results
+            List.map (formatResult scriptName options hasOnly) visibleResults
 
         obsoleteCount =
             List.length obsoleteSnapshots
@@ -1244,6 +1315,94 @@ deleteFile path =
     Script.exec "rm" [ path ]
 
 
+{-| Prompt user to approve each failing snapshot interactively.
+Returns the count of approved snapshots.
+-}
+promptForApprovals : String -> List TestResult -> BackendTask FatalError Int
+promptForApprovals scriptName failingResults =
+    let
+        -- Filter to only approvable failures (new or mismatch, not fatal errors)
+        approvable =
+            failingResults
+                |> List.filter
+                    (\r ->
+                        case r.outcome of
+                            FailNew _ ->
+                                True
+
+                            FailMismatch _ ->
+                                True
+
+                            _ ->
+                                False
+                    )
+    in
+    if List.isEmpty approvable then
+        BackendTask.succeed 0
+
+    else
+        Script.log ("\n" ++ yellow "Interactive approval mode" ++ " - reviewing " ++ String.fromInt (List.length approvable) ++ " snapshot(s)\n")
+            |> BackendTask.andThen (\_ -> promptForApprovalsLoop scriptName approvable 0)
+
+
+{-| Loop through failing tests, prompting for each.
+-}
+promptForApprovalsLoop : String -> List TestResult -> Int -> BackendTask FatalError Int
+promptForApprovalsLoop scriptName remaining approvedCount =
+    case remaining of
+        [] ->
+            BackendTask.succeed approvedCount
+
+        result :: rest ->
+            let
+                receivedPath =
+                    snapshotPath scriptName result.name ".received" result.extension
+
+                approvedPath =
+                    snapshotPath scriptName result.name ".approved" result.extension
+
+                prompt =
+                    "Approve \"" ++ result.name ++ "\"? [y/n/q] "
+            in
+            Script.question prompt
+                |> BackendTask.andThen
+                    (\input ->
+                        case String.toLower (String.trim input) of
+                            "y" ->
+                                -- Approve: move received to approved
+                                Script.exec "mv" [ receivedPath, approvedPath ]
+                                    |> BackendTask.andThen
+                                        (\_ ->
+                                            Script.log (green "  ✓" ++ " Approved\n")
+                                        )
+                                    |> BackendTask.andThen
+                                        (\_ ->
+                                            promptForApprovalsLoop scriptName rest (approvedCount + 1)
+                                        )
+
+                            "n" ->
+                                -- Skip this one
+                                Script.log (yellow "  ○" ++ " Skipped\n")
+                                    |> BackendTask.andThen
+                                        (\_ ->
+                                            promptForApprovalsLoop scriptName rest approvedCount
+                                        )
+
+                            "q" ->
+                                -- Quit prompting, return current count
+                                Script.log (yellow "  ○" ++ " Quit - remaining snapshots unchanged\n")
+                                    |> BackendTask.andThen (\_ -> BackendTask.succeed approvedCount)
+
+                            _ ->
+                                -- Invalid input, ask again
+                                Script.log (red "  Invalid input." ++ " Please enter y, n, or q.\n")
+                                    |> BackendTask.andThen
+                                        (\_ ->
+                                            promptForApprovalsLoop scriptName (result :: rest) approvedCount
+                                        )
+                    )
+
+
 isFailing : TestResult -> Bool
 isFailing result =
     case result.outcome of
@@ -1279,8 +1438,8 @@ isFailNew result =
             False
 
 
-formatResult : String -> CliOptions -> TestResult -> String
-formatResult scriptName options result =
+formatResult : String -> CliOptions -> Bool -> TestResult -> String
+formatResult scriptName options hasOnly result =
     case result.outcome of
         Pass ->
             green "✓" ++ " " ++ result.name
@@ -1293,7 +1452,8 @@ formatResult scriptName options result =
                 red "✗" ++ " " ++ result.name ++ " - new snapshot (no .approved file)"
 
             else
-                red "✗"
+                "\n"
+                    ++ red "✗"
                     ++ " "
                     ++ result.name
                     ++ "\n\n  New snapshot (no .approved file found)\n\n  Received:\n"
@@ -1301,7 +1461,7 @@ formatResult scriptName options result =
                     ++ "\n\n  To approve this snapshot, run with:\n    --approve"
                     ++ "\n\n  Or manually:\n    mv "
                     ++ snapshotPath scriptName result.name ".received" result.extension
-                    ++ " "
+                    ++ " \\\n       "
                     ++ snapshotPath scriptName result.name ".approved" result.extension
 
         FailMismatch { expected, received } ->
@@ -1309,7 +1469,8 @@ formatResult scriptName options result =
                 red "✗" ++ " " ++ result.name ++ " - snapshot mismatch"
 
             else
-                red "✗"
+                "\n"
+                    ++ red "✗"
                     ++ " "
                     ++ result.name
                     ++ "\n\n  Snapshot mismatch:\n\n"
@@ -1317,14 +1478,18 @@ formatResult scriptName options result =
                     ++ "\n\n  To approve this change, run with:\n    --approve"
                     ++ "\n\n  Or manually:\n    mv "
                     ++ snapshotPath scriptName result.name ".received" result.extension
-                    ++ " "
+                    ++ " \\\n       "
                     ++ snapshotPath scriptName result.name ".approved" result.extension
 
         FailFatalError _ ->
-            red "✗" ++ " " ++ result.name ++ " - fatal error"
+            "\n" ++ red "✗" ++ " " ++ result.name ++ " - fatal error"
 
         Skipped ->
-            yellow "○" ++ " " ++ result.name ++ dim " (skipped)"
+            if hasOnly then
+                yellow "○" ++ " " ++ result.name ++ dim " (skipped - only was used)"
+
+            else
+                yellow "○" ++ " " ++ result.name ++ dim " (skipped)"
 
         TodoOutcome description ->
             yellow "○" ++ " " ++ description ++ dim " (todo)"

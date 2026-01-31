@@ -199,6 +199,9 @@ elm-pages run src/Snapshots.elm
 # Approve all new/changed snapshots
 elm-pages run src/Snapshots.elm --approve
 
+# Interactive per-snapshot approval
+elm-pages run src/Snapshots.elm --approve=prompt
+
 # Approve a specific test
 elm-pages run src/Snapshots.elm --approve-only "test name"
 
