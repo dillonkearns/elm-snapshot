@@ -1032,10 +1032,14 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
         |> BackendTask.andThen (\_ -> Script.log output)
         |> BackendTask.andThen
             (\_ ->
-                if List.isEmpty failing then
+                let
+                    isIncomplete =
+                        skippedCount > 0 || todoCount > 0
+                in
+                if List.isEmpty failing && not isIncomplete then
                     BackendTask.succeed ()
 
-                else
+                else if not (List.isEmpty failing) then
                     -- If there's exactly one FatalError, re-throw it so elm-pages prints the full message
                     case fatalErrors of
                         [ singleError ] ->
@@ -1048,6 +1052,35 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
                                     , body = String.fromInt (List.length failing) ++ " test(s) failed"
                                     }
                                 )
+
+                else
+                    -- Incomplete test run (skipped or todo tests present)
+                    BackendTask.fail
+                        (FatalError.build
+                            { title = "Incomplete Test Run"
+                            , body =
+                                "Test run was incomplete: "
+                                    ++ (if skippedCount > 0 then
+                                            String.fromInt skippedCount ++ " skipped"
+
+                                        else
+                                            ""
+                                       )
+                                    ++ (if skippedCount > 0 && todoCount > 0 then
+                                            ", "
+
+                                        else
+                                            ""
+                                       )
+                                    ++ (if todoCount > 0 then
+                                            String.fromInt todoCount ++ " todo"
+
+                                        else
+                                            ""
+                                       )
+                                    ++ "\n\nThis is treated as a failure to prevent accidentally committing only/skip/todo."
+                            }
+                        )
             )
 
 
