@@ -1,0 +1,1 @@
+Query { conditions = [ Or [ Compare Status Equals (StringValue "active"), Compare Status Equals (StringValue "pending") ] ], limitValue = Nothing, offsetValue = Nothing, selectedFields = [], sorting = [ ( CreatedAt, Descending ) ] }

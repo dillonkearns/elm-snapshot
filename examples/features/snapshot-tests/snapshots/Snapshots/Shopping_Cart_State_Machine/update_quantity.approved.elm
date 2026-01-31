@@ -1,0 +1,1 @@
+Cart { discount = Nothing, items = [ { name = "Blue Widget", price = 1999, productId = "WIDGET-001", quantity = 5 } ], status = Shopping }

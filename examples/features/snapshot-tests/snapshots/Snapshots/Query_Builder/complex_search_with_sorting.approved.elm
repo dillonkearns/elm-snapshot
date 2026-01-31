@@ -1,0 +1,1 @@
+Query { conditions = [ Compare Status Equals (StringValue "active"), Compare Age GreaterThan (StringValue "18") ], limitValue = Just 25, offsetValue = Just 50, selectedFields = [ Name, Email, CreatedAt ], sorting = [ ( CreatedAt, Descending ), ( Name, Ascending ) ] }

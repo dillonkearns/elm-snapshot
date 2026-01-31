@@ -16,6 +16,8 @@
         "elm/core": "1.0.0 <= v < 2.0.0",
         "elm/json": "1.0.0 <= v < 2.0.0",
         "elm/regex": "1.0.0 <= v < 2.0.0",
+        "kraklin/elm-debug-parser": "2.0.0 <= v < 3.0.0",
+        "lue-bird/elm-syntax-format": "1.1.0 <= v < 2.0.0",
         "miniBill/elm-diff": "1.0.0 <= v < 2.0.0"
     },
     "test-dependencies": {}

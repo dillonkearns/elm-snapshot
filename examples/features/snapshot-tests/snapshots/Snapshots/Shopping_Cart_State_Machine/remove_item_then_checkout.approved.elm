@@ -1,0 +1,1 @@
+Cart { discount = Nothing, items = [ { name = "Item A", price = 1000, productId = "A", quantity = 1 }, { name = "Item C", price = 2500, productId = "C", quantity = 1 } ], status = CheckedOut { discountAmount = 0, subtotal = 3500, total = 3500 } }

@@ -1,4 +1,4 @@
-module Snapshot.Printer exposing (Printer, json, string, withExtension)
+module Snapshot.Printer exposing (Printer, elm, json, string, withExtension)
 
 {-| Printers convert domain objects to strings for snapshot comparison.
 
@@ -20,7 +20,7 @@ The printer's job is to create a human-readable, diffable representation.
 
 # Common Printers
 
-@docs string, json
+@docs string, json, elm
 
 
 # Customization
@@ -29,8 +29,13 @@ The printer's job is to create a human-readable, diffable representation.
 
 -}
 
+import DebugParser
+import DebugParser.ElmValue as ElmValue exposing (ElmValue)
+import ElmSyntaxParserLenient
+import ElmSyntaxPrint
 import Json.Decode as Decode
 import Json.Encode as Encode
+import Set exposing (Set)
 
 
 {-| A printer converts a value of type `a` to a String and specifies
@@ -137,3 +142,173 @@ jsonValueDecoder =
                         |> Encode.object
                 )
         ]
+
+
+{-| Pretty-prints any Elm value using elm-format style.
+
+Since published packages cannot use `Debug.toString` directly, you must pass
+it in as the first argument:
+
+    Snapshot.custom (Printer.elm Debug.toString) "user model" <|
+        \() -> model.user
+
+The output is formatted as valid Elm syntax, making diffs easy to read.
+
+Produces `.elm` files for syntax highlighting in diff tools.
+
+**Dependencies:** This printer relies on `kraklin/elm-debug-parser` and
+`lue-bird/elm-syntax-format` to parse and format the debug output.
+
+-}
+elm : (a -> String) -> Printer a
+elm debugToString =
+    { extension = "elm"
+    , print = prettifyValue debugToString
+    }
+
+
+prettifyValue : (a -> String) -> a -> String
+prettifyValue debugToString value =
+    let
+        valueAsString : String
+        valueAsString =
+            debugToString value
+    in
+    case DebugParser.parse DebugParser.defaultConfig ("a: " ++ valueAsString) of
+        Ok parsed ->
+            case
+                parsed.value
+                    |> elmValueToString Set.empty
+                    |> ElmSyntaxParserLenient.run ElmSyntaxParserLenient.expression
+                    |> Maybe.map
+                        (\syntaxModule ->
+                            syntaxModule.syntax
+                                |> ElmSyntaxPrint.expressionNotParenthesized []
+                                |> ElmSyntaxPrint.toString
+                        )
+            of
+                Just formatted ->
+                    formatted
+
+                Nothing ->
+                    "-- Error when formatting value\n" ++ valueAsString
+
+        Err _ ->
+            "-- Could not parse value, but here it is:\n" ++ valueAsString
+
+
+elmValueToString : Set String -> ElmValue -> String
+elmValueToString fieldsToSkip elmValue =
+    case elmValue of
+        ElmValue.Plain plainValue ->
+            plainValueToString plainValue
+
+        ElmValue.Expandable _ (ElmValue.ElmSequence sequenceType values) ->
+            sequenceTypeToString sequenceType (List.map (elmValueToString fieldsToSkip) values)
+
+        ElmValue.Expandable _ (ElmValue.ElmType typeName values) ->
+            (typeName :: List.map (elmValueToString fieldsToSkip) values)
+                |> join "(" " " ")"
+
+        ElmValue.Expandable _ (ElmValue.ElmRecord values) ->
+            List.filterMap
+                (\( field, fieldValue ) ->
+                    if Set.member field fieldsToSkip then
+                        Nothing
+
+                    else
+                        Just (field ++ " = " ++ elmValueToString fieldsToSkip fieldValue)
+                )
+                values
+                |> join "{" ", " "}"
+
+        ElmValue.Expandable _ (ElmValue.ElmDict values) ->
+            if List.isEmpty values then
+                "Dict.empty"
+
+            else
+                List.map
+                    (\( key, dictValue ) ->
+                        "( " ++ elmValueToString fieldsToSkip key ++ ", " ++ elmValueToString fieldsToSkip dictValue ++ " )"
+                    )
+                    values
+                    |> join "(Dict.fromList [" ", " "])"
+
+
+plainValueToString : ElmValue.PlainValue -> String
+plainValueToString plainValue =
+    case plainValue of
+        ElmValue.ElmString str ->
+            if String.contains "\n" str then
+                "\"\"\"" ++ str ++ "\"\"\""
+
+            else
+                "\"" ++ String.replace "\"" "\\\"" str ++ "\""
+
+        ElmValue.ElmChar char ->
+            "'" ++ String.fromChar char ++ "'"
+
+        ElmValue.ElmNumber float ->
+            String.fromFloat float
+
+        ElmValue.ElmBool True ->
+            "True"
+
+        ElmValue.ElmBool False ->
+            "False"
+
+        ElmValue.ElmFunction ->
+            "\"<function>\""
+
+        ElmValue.ElmInternals ->
+            "\"<internals>\""
+
+        ElmValue.ElmUnit ->
+            "()"
+
+        ElmValue.ElmFile str ->
+            "\"<file " ++ str ++ ">\""
+
+        ElmValue.ElmBytes int ->
+            "\"<bytes " ++ String.fromInt int ++ ">\""
+
+
+sequenceTypeToString : ElmValue.SequenceType -> List String -> String
+sequenceTypeToString sequenceType values =
+    case sequenceType of
+        ElmValue.SeqSet ->
+            if List.isEmpty values then
+                "Set.empty"
+
+            else
+                values
+                    |> join "(Set.fromList [" ", " "])"
+
+        ElmValue.SeqList ->
+            if List.isEmpty values then
+                "[]"
+
+            else
+                values
+                    |> join "[" ", " "]"
+
+        ElmValue.SeqArray ->
+            if List.isEmpty values then
+                "Array.empty"
+
+            else
+                values
+                    |> join "(Array.fromList [" ", " "])"
+
+        ElmValue.SeqTuple ->
+            if List.isEmpty values then
+                "()"
+
+            else
+                values
+                    |> join "(" ", " ")"
+
+
+join : String -> String -> String -> List String -> String
+join prefix separator suffix items =
+    prefix ++ String.join separator items ++ suffix

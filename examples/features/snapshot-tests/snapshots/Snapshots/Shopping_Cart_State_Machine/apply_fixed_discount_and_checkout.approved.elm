@@ -1,0 +1,1 @@
+Cart { discount = Just { code = "FLAT10", discountType = FixedAmount 1000 }, items = [ { name = "Super Gadget", price = 4999, productId = "GADGET-042", quantity = 2 }, { name = "Gadget Case", price = 1500, productId = "ACCESSORY-007", quantity = 1 } ], status = CheckedOut { discountAmount = 1000, subtotal = 11498, total = 10498 } }

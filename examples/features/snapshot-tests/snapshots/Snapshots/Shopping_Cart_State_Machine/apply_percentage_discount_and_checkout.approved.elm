@@ -1,0 +1,1 @@
+Cart { discount = Just { code = "SAVE20", discountType = Percentage 20 }, items = [ { name = "Blue Widget", price = 2000, productId = "WIDGET-001", quantity = 5 } ], status = CheckedOut { discountAmount = 2000, subtotal = 10000, total = 8000 } }

@@ -1,0 +1,1 @@
+Query { conditions = [ Compare Status Equals (StringValue "active") ], limitValue = Just 10, offsetValue = Nothing, selectedFields = [], sorting = [] }

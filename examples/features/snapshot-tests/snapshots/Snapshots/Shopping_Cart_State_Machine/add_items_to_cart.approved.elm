@@ -1,0 +1,1 @@
+Cart { discount = Nothing, items = [ { name = "Blue Widget", price = 1999, productId = "WIDGET-001", quantity = 2 }, { name = "Super Gadget", price = 4999, productId = "GADGET-042", quantity = 1 } ], status = Shopping }

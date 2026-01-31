@@ -1,0 +1,1 @@
+Query { conditions = [ And [ Compare Age GreaterThan (StringValue "21"), Or [ Compare Status Equals (StringValue "premium"), Compare Status Equals (StringValue "vip") ] ] ], limitValue = Just 100, offsetValue = Nothing, selectedFields = [], sorting = [] }
