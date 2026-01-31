@@ -205,6 +205,7 @@ type Outcome
     = Pass
     | FailNew String
     | FailMismatch { expected : String, received : String }
+    | FailFatalError FatalError
     | Approved
 
 
@@ -583,6 +584,14 @@ runTestWithReceived scriptName options name extension scrubbers receivedTask =
                                                 )
                         )
             )
+        |> BackendTask.onError
+            (\fatalError ->
+                BackendTask.succeed
+                    { name = name
+                    , extension = extension
+                    , outcome = FailFatalError fatalError
+                    }
+            )
 
 
 writeReceivedFile : String -> String -> BackendTask FatalError ()
@@ -809,6 +818,18 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
 
                 Nothing ->
                     BackendTask.succeed ()
+        -- Extract FatalErrors from failing tests
+        fatalErrors =
+            failing
+                |> List.filterMap
+                    (\result ->
+                        case result.outcome of
+                            FailFatalError err ->
+                                Just err
+
+                            _ ->
+                                Nothing
+                    )
     in
     pruneTask
         |> BackendTask.andThen (\_ -> reporterTask)
@@ -819,7 +840,18 @@ reportResultsWithObsolete scriptName options results obsoleteSnapshots untracked
                     BackendTask.succeed ()
 
                 else
-                    BackendTask.fail (FatalError.fromString "Tests failed")
+                    -- If there's exactly one FatalError, re-throw it so elm-pages prints the full message
+                    case fatalErrors of
+                        [ singleError ] ->
+                            BackendTask.fail singleError
+
+                        _ ->
+                            BackendTask.fail
+                                (FatalError.build
+                                    { title = "Snapshot Tests Failed"
+                                    , body = String.fromInt (List.length failing) ++ " test(s) failed"
+                                    }
+                                )
             )
 
 
@@ -869,6 +901,9 @@ isFailing result =
             True
 
         FailMismatch _ ->
+            True
+
+        FailFatalError _ ->
             True
 
 
@@ -922,6 +957,9 @@ formatResult scriptName options result =
                     ++ snapshotPath scriptName result.name ".received" result.extension
                     ++ " "
                     ++ snapshotPath scriptName result.name ".approved" result.extension
+
+        FailFatalError _ ->
+            red "✗" ++ " " ++ result.name ++ " - fatal error"
 
 
 formatDiff : String -> String -> String
