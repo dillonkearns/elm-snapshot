@@ -13,34 +13,7 @@ Approve output once to save you from unexpected changes.
 
 This approach captures human judgment about what correct output looks like. Instead of writing assertions by hand, you verify actual output once and let the tool enforce it forever.
 
-## Design Goals
-
-- **Elm-native** - Built on elm-pages, feels natural to Elm developers
-- **Deterministic** - JSON keys sorted alphabetically, scrubbers for timestamps/GUIDs
-- **Reviewable** - Human-readable snapshots, clear diffs on failure
-- **Minimal** - Small API surface, sensible defaults
-
-## Installation
-
-```bash
-elm install dillonkearns/elm-snapshot
-```
-
-## About elm-pages Scripts
-
-**Prerequisite:** This project is an Elm package which gives you an API similar to `elm-test` for defining test suites. Rather than running with `elm-test`, however, you run your snapshot test files with the [`elm-pages`](https://elm-pages.com/) CLI via the `elm-pages run` command. Snapshot tests run as [elm-pages scripts](https://elm-pages.com/docs/elm-pages-scripts) - standalone Elm programs that can perform file operations, HTTP, etc.
-
-**Why elm-pages?** Standard Elm test frameworks cannot write to the filesystem. elm-pages scripts bridge this gap.
-
-**New to elm-pages?**
-- [elm-pages Scripts Guide](https://elm-pages.com/docs/elm-pages-scripts)
-- [elm-pages Package Docs](https://package.elm-lang.org/packages/dillonkearns/elm-pages/latest/)
-
-You do NOT need a full elm-pages app - just the script runner (`npm install elm-pages`).
-
 ## Quick Start
-
-
 
 Run the init script to create a self-contained `snapshot-tests/` folder
 
@@ -58,9 +31,25 @@ npm run test:approve  # Approve the snapshots, then check them in to git
 npm test              # Tests pass now
 ```
 
-Edit `snapshot-tests/src/Snapshots.elm` to add your tests. See `examples/log-formatter/` for a fuller example with scrubbers and test grouping.
+Edit `snapshot-tests/src/Snapshots.elm` to add your tests.
 
-You can also see the minimal example folder: [`examples/minimal/`](examples/minimal/).
+## Examples
+
+- **[minimal](examples/minimal/)** - Bare-bones setup showing the simplest possible snapshot test
+- **[log-formatter](examples/log-formatter/)** - Fuller example demonstrating scrubbers, test grouping with `describe`, and multiple test files
+
+## About elm-pages Scripts
+
+**Prerequisite:** This project is an Elm package which gives you an API similar to `elm-test` for defining test suites. Rather than running with `elm-test`, however, you run your snapshot test files with the [`elm-pages`](https://elm-pages.com/) CLI via the `elm-pages run` command. Snapshot tests run as [elm-pages scripts](https://elm-pages.com/docs/elm-pages-scripts) - standalone Elm programs that can perform file operations, HTTP, etc.
+
+**Why elm-pages?** Standard Elm test frameworks cannot write to the filesystem. elm-pages scripts bridge this gap.
+
+**New to elm-pages?**
+- [elm-pages Scripts Guide](https://elm-pages.com/docs/elm-pages-scripts)
+- [elm-pages Package Docs](https://package.elm-lang.org/packages/dillonkearns/elm-pages/latest/)
+
+You do NOT need a full elm-pages app - just the script runner (`npm install elm-pages`).
+
 
 ## Writing Tests
 
@@ -87,7 +76,7 @@ greet name =
 
 Snapshots are saved to `snapshots/Snapshots/`. Commit the `.approved` files to source control.
 
-## Examples
+## Usage
 
 ### String Output (Most Common)
 
@@ -212,16 +201,6 @@ my-project/
 The `snapshots/` directory contains:
 - `.approved` files - The golden master (commit these)
 - `.received` files - Actual output on failure (gitignore these)
-
-## Running the Example
-
-A complete working example is available in `examples/log-formatter/`:
-
-```bash
-cd examples/log-formatter
-npm install
-npm test
-```
 
 ## Modules
 
