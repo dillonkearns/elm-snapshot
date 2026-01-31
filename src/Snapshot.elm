@@ -138,7 +138,9 @@ and you want to catch those failures before snapshotting.
 -}
 checkedTest : String -> (() -> Result String String) -> Test
 checkedTest name fn =
-    TaskTest name "txt" []
+    TaskTest name
+        "txt"
+        []
         (fn ()
             |> resultToBackendTask
         )
@@ -154,7 +156,9 @@ checkedTest name fn =
 -}
 checkedJson : String -> (() -> Result String Encode.Value) -> Test
 checkedJson name fn =
-    TaskTest name Printer.json.extension []
+    TaskTest name
+        Printer.json.extension
+        []
         (fn ()
             |> Result.map Printer.json.print
             |> resultToBackendTask
@@ -171,7 +175,9 @@ checkedJson name fn =
 -}
 checkedCustom : Printer a -> String -> (() -> Result String a) -> Test
 checkedCustom printer name fn =
-    TaskTest name printer.extension []
+    TaskTest name
+        printer.extension
+        []
         (fn ()
             |> Result.map printer.print
             |> resultToBackendTask
@@ -1092,7 +1098,7 @@ formatHumanOutput scriptName options results obsoleteSnapshots untrackedSnapshot
             [ String.fromInt (List.length passing) ++ " passing"
             , String.fromInt (List.length failing) ++ " failing"
             ]
-                ++ (if List.length approved > 0 then
+                ++ (if not (List.isEmpty approved) then
                         [ String.fromInt (List.length approved) ++ " approved" ]
 
                     else

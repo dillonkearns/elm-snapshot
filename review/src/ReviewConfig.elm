@@ -23,6 +23,7 @@ import NoInconsistentAliases
 import NoMissingTypeAnnotation
 import NoModuleOnExposedNames
 import NoUnused.CustomTypeConstructorArgs
+import Simplify
 import NoUnused.CustomTypeConstructors
 import NoUnused.Dependencies
 import NoUnused.Exports
@@ -68,6 +69,7 @@ config =
     , Docs.ReviewLinksAndSections.rule
     , Docs.ReviewAtDocs.rule
     , Docs.UpToDateReadmeLinks.rule
+    , Simplify.rule Simplify.defaults
     ]
         |> List.map
             (\rule ->
