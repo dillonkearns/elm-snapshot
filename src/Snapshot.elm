@@ -1150,10 +1150,15 @@ formatHumanOutput scriptName options hasOnly results obsoleteSnapshots untracked
 
         -- Hide passing tests by default (only show non-passing results)
         -- This matches elm-test, Jest, and Vitest behavior
+        -- In prompt mode, also hide failures (they'll be shown one at a time during prompting)
         visibleResults =
             if options.ci then
                 -- In CI mode, show all results
                 results
+
+            else if options.approve == ApprovePrompt then
+                -- In prompt mode, hide both passing and failing (failures shown during prompts)
+                List.filter (\r -> r.outcome /= Pass && not (isFailing r)) results
 
             else
                 -- In normal mode, hide pure passing tests
@@ -1361,10 +1366,15 @@ promptForApprovalsLoop scriptName remaining approvedCount =
                 approvedPath =
                     snapshotPath scriptName result.name ".approved" result.extension
 
+                -- Show the diff/content for this test
+                testOutput =
+                    formatResultForPrompt scriptName result
+
                 prompt =
-                    "Approve \"" ++ result.name ++ "\"? [y/n/q] "
+                    "Approve? [y/n/q] "
             in
-            Script.question prompt
+            Script.log testOutput
+                |> BackendTask.andThen (\_ -> Script.question prompt)
                 |> BackendTask.andThen
                     (\input ->
                         case String.toLower (String.trim input) of
@@ -1401,6 +1411,37 @@ promptForApprovalsLoop scriptName remaining approvedCount =
                                             promptForApprovalsLoop scriptName (result :: rest) approvedCount
                                         )
                     )
+
+
+{-| Format a failing test result for interactive prompting.
+Shows the diff/content without approval instructions.
+-}
+formatResultForPrompt : String -> TestResult -> String
+formatResultForPrompt scriptName result =
+    case result.outcome of
+        FailNew received ->
+            "\n"
+                ++ red "✗"
+                ++ " "
+                ++ result.name
+                ++ "\n\n  New snapshot (no .approved file found)\n\n  Received:\n"
+                ++ indentBlock (green received)
+                ++ "\n"
+
+        FailMismatch { expected, received } ->
+            "\n"
+                ++ red "✗"
+                ++ " "
+                ++ result.name
+                ++ "\n\n  Snapshot mismatch:\n\n"
+                ++ formatDiff expected received
+                ++ "\n"
+
+        FailFatalError _ ->
+            "\n" ++ red "✗" ++ " " ++ result.name ++ " - fatal error\n"
+
+        _ ->
+            ""
 
 
 isFailing : TestResult -> Bool
@@ -1505,7 +1546,7 @@ formatDiff expected received =
             String.lines received
 
         changes =
-            Diff.diff receivedLines expectedLines
+            Diff.diff expectedLines receivedLines
     in
     changes
         |> List.concatMap formatChange

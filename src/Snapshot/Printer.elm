@@ -187,9 +187,14 @@ prettifyValue debugToString value =
     in
     case DebugParser.parse DebugParser.defaultConfig ("a: " ++ valueAsString) of
         Ok parsed ->
+            let
+                -- First pass: convert to string (no line breaks)
+                singleLine =
+                    elmValueToStringSingleLine Set.empty parsed.value
+            in
+            -- Use elm-syntax-format for proper parenthesization
             case
-                parsed.value
-                    |> elmValueToString Set.empty
+                singleLine
                     |> ElmSyntaxParserLenient.run ElmSyntaxParserLenient.expression
                     |> Maybe.map
                         (\syntaxModule ->
@@ -199,51 +204,178 @@ prettifyValue debugToString value =
                         )
             of
                 Just formatted ->
-                    formatted
+                    -- Add line breaks for long lines
+                    breakLongLines 0 formatted
 
                 Nothing ->
-                    "-- Error when formatting value\n" ++ valueAsString
+                    singleLine
 
         Err _ ->
             "-- Could not parse value, but here it is:\n" ++ valueAsString
 
 
-elmValueToString : Set String -> ElmValue -> String
-elmValueToString fieldsToSkip elmValue =
+{-| Add line breaks to formatted output when lines exceed 80 characters.
+-}
+breakLongLines : Int -> String -> String
+breakLongLines _ input =
+    if String.length input <= 80 then
+        input
+
+    else
+        breakAtTopLevelCommas input
+
+
+{-| Break at top-level record field commas only (not inside nested structures).
+-}
+breakAtTopLevelCommas : String -> String
+breakAtTopLevelCommas input =
+    let
+        -- Find the position of the opening brace
+        chars =
+            String.toList input
+
+        result =
+            breakHelper chars 0 0 []
+    in
+    result
+
+
+{-| Helper to break at commas only when at depth 1 (inside outer record).
+-}
+breakHelper : List Char -> Int -> Int -> List Char -> String
+breakHelper chars depth braceDepth acc =
+    case chars of
+        [] ->
+            String.fromList (List.reverse acc)
+
+        '{' :: rest ->
+            if braceDepth == 0 then
+                -- Opening brace of outer record
+                breakHelper rest depth (braceDepth + 1) ('{' :: acc)
+
+            else
+                breakHelper rest depth (braceDepth + 1) ('{' :: acc)
+
+        ' ' :: '}' :: rest ->
+            if braceDepth == 1 then
+                -- Closing brace of outer record - add newline before (trim trailing space)
+                breakHelper rest depth (braceDepth - 1) ('}' :: ' ' :: ' ' :: ' ' :: ' ' :: '\n' :: acc)
+
+            else
+                breakHelper rest depth (braceDepth - 1) ('}' :: ' ' :: acc)
+
+        '}' :: rest ->
+            if braceDepth == 1 then
+                -- Closing brace of outer record - add newline before
+                breakHelper rest depth (braceDepth - 1) ('}' :: ' ' :: ' ' :: ' ' :: ' ' :: '\n' :: acc)
+
+            else
+                breakHelper rest depth (braceDepth - 1) ('}' :: acc)
+
+        '[' :: rest ->
+            breakHelper rest (depth + 1) braceDepth ('[' :: acc)
+
+        ']' :: rest ->
+            breakHelper rest (depth - 1) braceDepth (']' :: acc)
+
+        '(' :: rest ->
+            breakHelper rest (depth + 1) braceDepth ('(' :: acc)
+
+        ')' :: rest ->
+            breakHelper rest (depth - 1) braceDepth (')' :: acc)
+
+        ',' :: ' ' :: rest ->
+            if braceDepth == 1 && depth == 0 then
+                -- Top-level comma in record - add newline
+                breakHelper rest depth braceDepth (' ' :: ',' :: ' ' :: ' ' :: ' ' :: ' ' :: '\n' :: acc)
+
+            else
+                breakHelper rest depth braceDepth (' ' :: ',' :: acc)
+
+        c :: rest ->
+            breakHelper rest depth braceDepth (c :: acc)
+
+
+{-| Convert ElmValue to a single-line string (for elm-syntax-format processing).
+-}
+elmValueToStringSingleLine : Set String -> ElmValue -> String
+elmValueToStringSingleLine fieldsToSkip elmValue =
     case elmValue of
         ElmValue.Plain plainValue ->
             plainValueToString plainValue
 
         ElmValue.Expandable _ (ElmValue.ElmSequence sequenceType values) ->
-            sequenceTypeToString sequenceType (List.map (elmValueToString fieldsToSkip) values)
+            sequenceTypeToStringSingleLine sequenceType (List.map (elmValueToStringSingleLine fieldsToSkip) values)
 
         ElmValue.Expandable _ (ElmValue.ElmType typeName values) ->
-            (typeName :: List.map (elmValueToString fieldsToSkip) values)
-                |> join "(" " " ")"
+            case values of
+                [] ->
+                    typeName
+
+                _ ->
+                    "(" ++ typeName ++ " " ++ String.join " " (List.map (elmValueToStringSingleLine fieldsToSkip) values) ++ ")"
 
         ElmValue.Expandable _ (ElmValue.ElmRecord values) ->
-            List.filterMap
-                (\( field, fieldValue ) ->
-                    if Set.member field fieldsToSkip then
-                        Nothing
+            let
+                fields =
+                    List.filterMap
+                        (\( field, fieldValue ) ->
+                            if Set.member field fieldsToSkip then
+                                Nothing
 
-                    else
-                        Just (field ++ " = " ++ elmValueToString fieldsToSkip fieldValue)
-                )
-                values
-                |> join "{" ", " "}"
+                            else
+                                Just (field ++ " = " ++ elmValueToStringSingleLine fieldsToSkip fieldValue)
+                        )
+                        values
+            in
+            "{ " ++ String.join ", " fields ++ " }"
 
         ElmValue.Expandable _ (ElmValue.ElmDict values) ->
             if List.isEmpty values then
                 "Dict.empty"
 
             else
-                List.map
-                    (\( key, dictValue ) ->
-                        "( " ++ elmValueToString fieldsToSkip key ++ ", " ++ elmValueToString fieldsToSkip dictValue ++ " )"
-                    )
-                    values
-                    |> join "(Dict.fromList [" ", " "])"
+                let
+                    items =
+                        List.map
+                            (\( key, dictValue ) ->
+                                "( " ++ elmValueToStringSingleLine fieldsToSkip key ++ ", " ++ elmValueToStringSingleLine fieldsToSkip dictValue ++ " )"
+                            )
+                            values
+                in
+                "(Dict.fromList [ " ++ String.join ", " items ++ " ])"
+
+
+sequenceTypeToStringSingleLine : ElmValue.SequenceType -> List String -> String
+sequenceTypeToStringSingleLine sequenceType values =
+    case sequenceType of
+        ElmValue.SeqSet ->
+            if List.isEmpty values then
+                "Set.empty"
+
+            else
+                "(Set.fromList [ " ++ String.join ", " values ++ " ])"
+
+        ElmValue.SeqList ->
+            if List.isEmpty values then
+                "[]"
+
+            else
+                "[ " ++ String.join ", " values ++ " ]"
+
+        ElmValue.SeqArray ->
+            if List.isEmpty values then
+                "Array.empty"
+
+            else
+                "(Array.fromList [ " ++ String.join ", " values ++ " ])"
+
+        ElmValue.SeqTuple ->
+            if List.isEmpty values then
+                "()"
+
+            else
+                "( " ++ String.join ", " values ++ " )"
 
 
 plainValueToString : ElmValue.PlainValue -> String
@@ -285,62 +417,4 @@ plainValueToString plainValue =
             "\"<file " ++ str ++ ">\""
 
         ElmValue.ElmBytes int ->
-            "\"<bytes " ++ String.fromInt int ++ ">\""
-
-
-sequenceTypeToString : ElmValue.SequenceType -> List String -> String
-sequenceTypeToString sequenceType values =
-    case sequenceType of
-        ElmValue.SeqSet ->
-            if List.isEmpty values then
-                "Set.empty"
-
-            else
-                values
-                    |> join "(Set.fromList [" ", " "])"
-
-        ElmValue.SeqList ->
-            if List.isEmpty values then
-                "[]"
-
-            else
-                values
-                    |> join "[" ", " "]"
-
-        ElmValue.SeqArray ->
-            if List.isEmpty values then
-                "Array.empty"
-
-            else
-                values
-                    |> join "(Array.fromList [" ", " "])"
-
-        ElmValue.SeqTuple ->
-            if List.isEmpty values then
-                "()"
-
-            else
-                values
-                    |> join "(" ", " ")"
-
-
-join : String -> String -> String -> List String -> String
-join prefix separator suffix items =
-    let
-        singleLine =
-            prefix ++ String.join separator items ++ suffix
-
-        -- Use multi-line format if single line would be too long (> 80 chars)
-        -- This improves readability and makes diffs easier to review
-        maxLineLength =
-            80
-    in
-    if String.length singleLine > maxLineLength && List.length items > 1 then
-        prefix
-            ++ "\n    "
-            ++ String.join (separator ++ "\n    ") items
-            ++ "\n"
-            ++ suffix
-
-    else
-        singleLine
+            "\"<bytes " ++ String.fromInt int ++ "\""
