@@ -10,7 +10,7 @@ module Snapshot.Scrubber exposing
 {-| Scrubbers clean non-deterministic content from snapshot output.
 
 "Fundamentally, a scrubber is a function that takes a string and returns a string."
-— ApprovalTests documentation
+— [ApprovalTests documentation](https://approvaltests.com/docs/reference/Scrubbers/)
 
 Scrubbers are applied AFTER the printer converts your value to a string.
 They replace variable content (timestamps, GUIDs, etc.) with stable placeholders.
