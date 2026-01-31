@@ -1,6 +1,6 @@
 # elm-snapshot
 
-Approve output once to save you from unexpected changes.
+Snapshot testing framework for Elm. Approve output once to save you from unexpected changes.
 
 ![Failing tests showing diff](https://github.com/dillonkearns/elm-snapshot/blob/main/documentation/images/failing-tests.png?raw=true)
 
@@ -139,6 +139,7 @@ import Snapshot.Scrubber as Scrubber
 Snapshot.test "log entry" (\() -> formatLog entry)
     |> Snapshot.withScrubbers [ Scrubber.timestamp ]
 
+-- Add scrubbers to a test with non-deterministic output
 Snapshot.test "user record" (\() -> formatUser user)
     |> Snapshot.withScrubbers [ Scrubber.guid, Scrubber.timestamp ]
 ```

@@ -53,7 +53,7 @@ type alias Scrubber =
     String -> String
 
 
-{-| Compose multiple scrubbers into one. Applied left to right.
+{-| Compose multiple scrubbers into one. Applied first to last.
 
     Scrubber.all
         [ Scrubber.timestamp

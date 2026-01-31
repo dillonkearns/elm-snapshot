@@ -194,7 +194,7 @@ resultToBackendTask result =
             BackendTask.fail (FatalError.fromString errorMessage)
 
 
-{-| Add scrubbers to a test for non-deterministic output.
+{-| Add scrubbers to a test with non-deterministic output.
 
     Snapshot.test "log entry" (\() -> formatLog entry)
         |> Snapshot.withScrubbers [ Scrubber.timestamp ]
@@ -255,6 +255,9 @@ describe name tests =
 When any test is marked with `only`, all tests without `only` will be skipped.
 Use this during development to focus on specific tests.
 
+**Important:** Using `only` causes the test suite to fail, preventing you from
+accidentally committing focused tests to CI.
+
 Note: `skip` takes precedence over `only` - a skipped test won't run even
 if it's inside an `only` block.
 
@@ -273,6 +276,9 @@ only =
 The test will be reported as skipped but won't be executed.
 Use this to temporarily disable tests without deleting them.
 
+**Important:** Using `skip` causes the test suite to fail, preventing you from
+accidentally committing skipped tests to CI.
+
 Note: `skip` takes precedence over `only` - a skipped test won't run even
 if it's inside an `only` block.
 
@@ -288,6 +294,9 @@ skip =
 
 The test will be reported as a todo item. This is useful for jotting down
 test ideas without implementing them immediately.
+
+**Important:** Using `todo` causes the test suite to fail, preventing you from
+accidentally committing incomplete tests to CI.
 
 -}
 todo : String -> Test
