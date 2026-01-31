@@ -76,6 +76,42 @@ greet name =
 
 Snapshots are saved to `snapshots/Snapshots/`. Commit the `.approved` files to source control.
 
+## Organizing Tests
+
+As your test suite grows, split tests into modules that each expose a `List Snapshot.Test`:
+
+```elm
+-- snapshot-tests/src/Snapshots.elm (entry point)
+module Snapshots exposing (run)
+
+import Pages.Script exposing (Script)
+import Snapshot
+import Snapshots.Auth as Auth
+import Snapshots.Api as Api
+
+run : Script
+run =
+    Snapshot.run "Snapshots"
+        (Auth.tests ++ Api.tests)
+```
+
+```elm
+-- snapshot-tests/src/Snapshots/Auth.elm
+module Snapshots.Auth exposing (tests)
+
+import Snapshot
+
+tests : List Snapshot.Test
+tests =
+    [ Snapshot.describe "Auth"
+        [ Snapshot.test "login success" <| \() -> ...
+        , Snapshot.test "login failure" <| \() -> ...
+        ]
+    ]
+```
+
+This keeps a single entry point while organizing tests by domain. The `describe` blocks create subdirectories in the snapshots folder.
+
 ## Usage
 
 ### String Output (Most Common)
