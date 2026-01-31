@@ -40,58 +40,24 @@ You do NOT need a full elm-pages app - just the script runner (`npm install elm-
 
 ## Quick Start
 
-### Init Via Remote Script
-
-First, install the `elm-pages` CLI tool (recommended: add it to your project's package.json)
-
-```bash
-npm install --save-dev elm-pages
-```
-
-Then run the elm-pages script Init script from this repo remotely. 
-This creates a `snapshot-tests/` folder with the elm-pages script project.
+Run the init script to create a self-contained `snapshot-tests/` folder:
 
 ```bash
 npx elm-pages run github:dillonkearns/elm-snapshot:script/src/Init.elm
-cd snapshot-tests && npx elm-pages run src/Snapshots.elm
+cd snapshot-tests && npm install
 ```
 
+Then run your tests:
 
-2. Edit `snapshot-tests/src/Snapshots.elm` to add your tests
+```bash
+npm test              # First run will fail (no approved snapshots yet)
+npm run test:approve  # Approve the snapshots
+npm test              # Tests pass now
+```
 
-### Option 2: Manual Setup
+Edit `snapshot-tests/src/Snapshots.elm` to add your tests. See `examples/log-formatter/` for a fuller example with scrubbers and test grouping.
 
-1. **Create directory structure:**
-   ```bash
-   mkdir -p snapshot-tests/src
-   cd snapshot-tests
-   ```
-
-2. **Initialize npm and install elm-pages:**
-   ```bash
-   npm init -y
-   npm install elm-pages
-   ```
-
-3. **Copy the minimal example** as your starting point:
-   ```bash
-   cp -r path/to/elm-snapshot/examples/minimal/snapshot-tests .
-   ```
-   Adjust `source-directories` in elm.json to include your project's src.
-
-4. **Add npm scripts** to your `package.json`:
-   ```json
-   "scripts": {
-     "test": "elm-pages run snapshot-tests/src/Snapshots.elm",
-     "test:approve": "elm-pages run snapshot-tests/src/Snapshots.elm --approve"
-   }
-   ```
-
-See `examples/minimal/` for a complete minimal setup, or `examples/log-formatter/` for a fuller example with scrubbers and test grouping.
-
-## Quick Start
-
-Create a snapshot test script:
+## Writing Tests
 
 ```elm
 -- snapshot-tests/src/Snapshots.elm
@@ -114,19 +80,7 @@ greet name =
     "Hello, " ++ name ++ "!"
 ```
 
-Run the tests:
-
-```bash
-elm-pages run snapshot-tests/src/Snapshots.elm
-```
-
-On first run, tests will fail because no approved snapshots exist. Review the output and approve:
-
-```bash
-elm-pages run snapshot-tests/src/Snapshots.elm --approve
-```
-
-Snapshots are saved to `snapshots/Snapshots/`. Commit these `.approved` files to source control.
+Snapshots are saved to `snapshots/Snapshots/`. Commit the `.approved` files to source control.
 
 ## Examples
 

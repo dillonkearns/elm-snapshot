@@ -4,6 +4,7 @@ module Init exposing (run)
 
 This script creates the snapshot-tests folder with minimal setup:
 
+  - snapshot-tests/package.json
   - snapshot-tests/elm.json
   - snapshot-tests/src/Snapshots.elm
 
@@ -21,6 +22,14 @@ run : Script
 run =
     Script.withoutCliOptions
         (Script.log "Initializing elm-snapshot..."
+            |> Script.doThen
+                (Script.writeFile
+                    { path = "snapshot-tests/package.json"
+                    , body = snapshotTestsPackageJson
+                    }
+                    |> BackendTask.allowFatal
+                )
+            |> Script.doThen (Script.log "  Created snapshot-tests/package.json")
             |> Script.doThen
                 (Script.writeFile
                     { path = "snapshot-tests/elm.json"
@@ -44,11 +53,8 @@ Done! Created snapshot-tests/ folder.
 
 Next steps:
 
-  1. Add test scripts to your package.json:
-     "scripts": {
-       "test": "cd snapshot-tests && elm-pages run src/Snapshots.elm",
-       "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve"
-     }
+  1. Install dependencies:
+     cd snapshot-tests && npm install
 
   2. Edit snapshot-tests/src/Snapshots.elm to import your modules and add tests.
 
@@ -59,6 +65,22 @@ Next steps:
 """
                 )
         )
+
+
+snapshotTestsPackageJson : String
+snapshotTestsPackageJson =
+    """{
+  "name": "snapshot-tests",
+  "private": true,
+  "scripts": {
+    "test": "elm-pages run src/Snapshots.elm",
+    "test:approve": "elm-pages run src/Snapshots.elm --approve"
+  },
+  "devDependencies": {
+    "elm-pages": "^10.2.2"
+  }
+}
+"""
 
 
 snapshotTestsElmJson : String
@@ -148,8 +170,6 @@ import Snapshot
 run : Script
 run =
     Snapshot.run "Snapshots"
-        [ -- Add your snapshot tests here, for example:
-          -- Snapshot.test "my test" <|
-          --     \\() -> MyModule.myFunction "input"
+        [ Snapshot.todo "my first snapshot test"
         ]
 """
