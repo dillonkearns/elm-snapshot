@@ -303,6 +303,16 @@ type ApproveMode
     | ApproveNamed String
 
 
+isApproveOnly : ApproveMode -> Bool
+isApproveOnly mode =
+    case mode of
+        ApproveNamed _ ->
+            True
+
+        _ ->
+            False
+
+
 {-| Run a list of snapshot tests as an elm-pages Script.
 
     -- In your Snapshots.elm script:
@@ -341,8 +351,16 @@ run scriptName tests =
                 hasOnly =
                     List.any (\t -> t.runStatus == OnlyTest) flattenedTests
             in
-            -- First check for duplicate test names
-            case findDuplicates testNames of
+            -- Check for invalid flag combinations
+            if options.prune && isApproveOnly options.approve then
+                BackendTask.fail
+                    (FatalError.fromString
+                        "Cannot use --prune with --approve-only.\n\n--prune removes snapshots not covered by any test, but --approve-only only runs a single test.\nThis combination would incorrectly prune all other snapshots."
+                    )
+
+            else
+                -- First check for duplicate test names
+                case findDuplicates testNames of
                 firstDuplicate :: _ ->
                     BackendTask.fail
                         (FatalError.fromString
