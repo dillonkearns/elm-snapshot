@@ -40,22 +40,27 @@ You do NOT need a full elm-pages app - just the script runner (`npm install elm-
 
 ## Quick Start
 
-Run the init script to create a self-contained `snapshot-tests/` folder:
+
+
+Run the init script to create a self-contained `snapshot-tests/` folder
 
 ```bash
 npx elm-pages run github:dillonkearns/elm-snapshot:script/src/Init.elm
-cd snapshot-tests && npm install
+cd snapshot-tests
+npm install
 ```
 
 Then run your tests:
 
 ```bash
 npm test              # First run will fail (no approved snapshots yet)
-npm run test:approve  # Approve the snapshots
+npm run test:approve  # Approve the snapshots, then check them in to git
 npm test              # Tests pass now
 ```
 
 Edit `snapshot-tests/src/Snapshots.elm` to add your tests. See `examples/log-formatter/` for a fuller example with scrubbers and test grouping.
+
+You can also see the minimal example folder: [`examples/minimal/`](examples/minimal/).
 
 ## Writing Tests
 
