@@ -4,6 +4,10 @@ Snapshot testing framework for Elm. Approve output once to save you from unexpec
 
 ![Failing tests showing diff](https://github.com/dillonkearns/elm-snapshot/blob/main/documentation/images/failing-tests.png?raw=true)
 
+Interactive approval with `--approve=prompt` (single keypress, Enter to accept):
+
+![Interactive approval mode](https://github.com/dillonkearns/elm-snapshot/blob/main/documentation/images/interactive-test.png?raw=true)
+
 
 ## How It Works
 

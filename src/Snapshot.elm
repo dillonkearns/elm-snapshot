@@ -1084,7 +1084,7 @@ reportResultsWithObsolete scriptName options hasOnly results obsoleteSnapshots u
                             BackendTask.fail
                                 (FatalError.build
                                     { title = "Snapshot Tests Failed"
-                                    , body = String.fromInt (List.length failing) ++ " test(s) failed"
+                                    , body = "Run with --approve to accept changes, or fix the code."
                                     }
                                 )
 
@@ -1371,13 +1371,14 @@ promptForApprovalsLoop scriptName remaining approvedCount =
                     formatResultForPrompt scriptName result
 
                 prompt =
-                    "Approve? [y/n/q] "
+                    "Approve? [Y/n/q] "
             in
             Script.log testOutput
-                |> BackendTask.andThen (\_ -> Script.question prompt)
+                |> BackendTask.andThen (\_ -> Script.log prompt)
+                |> BackendTask.andThen (\_ -> Script.readKeyWithDefault "y")
                 |> BackendTask.andThen
                     (\input ->
-                        case String.toLower (String.trim input) of
+                        case String.toLower input of
                             "y" ->
                                 -- Approve: move received to approved
                                 Script.exec "mv" [ receivedPath, approvedPath ]

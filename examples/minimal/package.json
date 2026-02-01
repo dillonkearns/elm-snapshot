@@ -3,9 +3,9 @@
   "private": true,
   "scripts": {
     "test": "cd snapshot-tests && elm-pages run src/Snapshots.elm",
-    "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve"
+    "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve=all"
   },
   "devDependencies": {
-    "elm-pages": "^3.0.0"
+    "elm-pages": "^3.0.28"
   }
 }
