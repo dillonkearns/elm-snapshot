@@ -33,6 +33,15 @@ npm run test:approve  # Approve the snapshots, then check them in to git
 npm test              # Tests pass now
 ```
 
+The `npm test` command from init runs:
+
+```bash
+cd snapshot-tests && npx elm-pages run src/Snapshots.elm
+```
+
+Check out the [About elm-pages Scripts section](#about-elm-pages-scripts) for more on running scripts through the `elm-pages` CLI.
+
+
 Edit `snapshot-tests/src/Snapshots.elm` to add your tests.
 
 ## Examples

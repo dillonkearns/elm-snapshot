@@ -2,48 +2,26 @@ module Snapshot exposing (Test, run, test, json, custom, checkedTest, checkedJso
 
 {-| Snapshot testing framework for Elm.
 
-An idiomatic Elm API for approval/snapshot testing.
+    module Snapshots exposing (run)
 
-    -- String output (most common)
-    Snapshot.test "greeting" <|
-        \() -> greet "World"
+    import Json.Encode
+    import Pages.Script exposing (Script)
+    import Snapshot
 
-    -- JSON output with pretty printing
-    Snapshot.json "user data" <|
-        \() -> User.encode user
+    run : Script
+    run =
+        Snapshot.run "Snapshots"
+            [ Snapshot.test "greeting" <|
+                \() -> "Hello, " ++ "World" ++ "!"
+            , Snapshot.json "user" <|
+                \() ->
+                    Json.Encode.object
+                        [ ( "name", Json.Encode.string "Alice" )
+                        , ( "age", Json.Encode.int 30 )
+                        ]
+            ]
 
-    -- With scrubbers for non-deterministic output
-    Snapshot.test "log entry" (\() -> formatLog entry)
-        |> Snapshot.withScrubbers [ Scrubber.timestamp ]
-
-    -- Grouped tests
-    Snapshot.describe "Date formatting"
-        [ Snapshot.test "ISO format" <| \() -> Date.toIso date
-        , Snapshot.test "human readable" <| \() -> Date.toHuman date
-        ]
-
-    -- Custom printer
-    Snapshot.custom myPrinter "custom format" <|
-        \() -> myValue
-
-    -- Checked test (fails early if Err)
-    Snapshot.checkedTest "parsed config" <|
-        \() ->
-            Config.parse rawInput
-                |> Result.map Config.toString
-
-    -- Focus on specific tests during development
-    Snapshot.only <|
-        Snapshot.test "work in progress" <|
-            \() -> newFeature
-
-    -- Skip tests temporarily
-    Snapshot.skip <|
-        Snapshot.test "broken test" <|
-            \() -> brokenCode
-
-    -- Placeholder for tests to implement later
-    Snapshot.todo "implement edge case handling"
+Run with `elm-pages run src/Snapshots.elm --approve=prompt` and press Enter to approve each snapshot. Commit the `.approved` files to git.
 
 @docs Test, run, test, json, custom, checkedTest, checkedJson, checkedCustom, taskTest, taskJson, taskCustom, withScrubbers, describe, only, skip, todo
 
