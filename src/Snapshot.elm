@@ -1368,7 +1368,7 @@ promptForApprovalsLoop scriptName remaining approvedCount =
 
                 -- Show the diff/content for this test
                 testOutput =
-                    formatResultForPrompt scriptName result
+                    formatResultForPrompt result
 
                 prompt =
                     "Approve? [Y/n/q] "
@@ -1417,8 +1417,8 @@ promptForApprovalsLoop scriptName remaining approvedCount =
 {-| Format a failing test result for interactive prompting.
 Shows the diff/content without approval instructions.
 -}
-formatResultForPrompt : String -> TestResult -> String
-formatResultForPrompt scriptName result =
+formatResultForPrompt : TestResult -> String
+formatResultForPrompt result =
     case result.outcome of
         FailNew received ->
             "\n"

@@ -1,4 +1,8 @@
-module Snapshot.Printer exposing (Printer, elm, json, string, withExtension)
+module Snapshot.Printer exposing
+    ( Printer
+    , string, json, elm
+    , withExtension
+    )
 
 {-| Printers convert domain objects to strings for snapshot comparison.
 
@@ -44,6 +48,7 @@ the file extension for syntax highlighting in diff tools.
 The extension is used to generate snapshot filenames like:
 
     test_name.approved.json
+
     test_name.received.txt
 
 -}
@@ -205,7 +210,7 @@ prettifyValue debugToString value =
             of
                 Just formatted ->
                     -- Add line breaks for long lines
-                    breakLongLines 0 formatted
+                    breakLongLines formatted
 
                 Nothing ->
                     singleLine
@@ -216,8 +221,8 @@ prettifyValue debugToString value =
 
 {-| Add line breaks to formatted output when lines exceed 80 characters.
 -}
-breakLongLines : Int -> String -> String
-breakLongLines _ input =
+breakLongLines : String -> String
+breakLongLines input =
     if String.length input <= 80 then
         input
 
@@ -249,17 +254,12 @@ breakHelper chars depth braceDepth acc =
             String.fromList (List.reverse acc)
 
         '{' :: rest ->
-            if braceDepth == 0 then
-                -- Opening brace of outer record
-                breakHelper rest depth (braceDepth + 1) ('{' :: acc)
-
-            else
-                breakHelper rest depth (braceDepth + 1) ('{' :: acc)
+            breakHelper rest depth (braceDepth + 1) ('{' :: acc)
 
         ' ' :: '}' :: rest ->
             if braceDepth == 1 then
                 -- Closing brace of outer record - add newline before (trim trailing space)
-                breakHelper rest depth (braceDepth - 1) ('}' :: ' ' :: ' ' :: ' ' :: ' ' :: '\n' :: acc)
+                breakHelper rest depth 0 ('}' :: ' ' :: ' ' :: ' ' :: ' ' :: '\n' :: acc)
 
             else
                 breakHelper rest depth (braceDepth - 1) ('}' :: ' ' :: acc)
@@ -267,7 +267,7 @@ breakHelper chars depth braceDepth acc =
         '}' :: rest ->
             if braceDepth == 1 then
                 -- Closing brace of outer record - add newline before
-                breakHelper rest depth (braceDepth - 1) ('}' :: ' ' :: ' ' :: ' ' :: ' ' :: '\n' :: acc)
+                breakHelper rest depth 0 ('}' :: ' ' :: ' ' :: ' ' :: ' ' :: '\n' :: acc)
 
             else
                 breakHelper rest depth (braceDepth - 1) ('}' :: acc)
