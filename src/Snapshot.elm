@@ -52,6 +52,7 @@ Group related tests using `describe`.
 type Test
     = PureTest String String (List Scrubber) (() -> String)
     | TaskTest String String (List Scrubber) (BackendTask FatalError String)
+    | CheckedError String String String
     | Describe String (List Test)
     | Only Test
     | Skip Test
@@ -116,12 +117,12 @@ and you want to catch those failures before snapshotting.
 -}
 checkedTest : String -> (() -> Result String String) -> Test
 checkedTest name fn =
-    TaskTest name
-        "txt"
-        []
-        (fn ()
-            |> resultToBackendTask
-        )
+    case fn () of
+        Ok value ->
+            PureTest name "txt" [] (\() -> value)
+
+        Err errorMessage ->
+            CheckedError name "txt" errorMessage
 
 
 {-| Create a JSON snapshot test that validates before snapshotting.
@@ -134,13 +135,12 @@ checkedTest name fn =
 -}
 checkedJson : String -> (() -> Result String Encode.Value) -> Test
 checkedJson name fn =
-    TaskTest name
-        Printer.json.extension
-        []
-        (fn ()
-            |> Result.map Printer.json.print
-            |> resultToBackendTask
-        )
+    case fn () |> Result.map Printer.json.print of
+        Ok value ->
+            PureTest name Printer.json.extension [] (\() -> value)
+
+        Err errorMessage ->
+            CheckedError name Printer.json.extension errorMessage
 
 
 {-| Create a snapshot test with a custom printer that validates before snapshotting.
@@ -153,13 +153,12 @@ checkedJson name fn =
 -}
 checkedCustom : Printer a -> String -> (() -> Result String a) -> Test
 checkedCustom printer name fn =
-    TaskTest name
-        printer.extension
-        []
-        (fn ()
-            |> Result.map printer.print
-            |> resultToBackendTask
-        )
+    case fn () |> Result.map printer.print of
+        Ok value ->
+            PureTest name printer.extension [] (\() -> value)
+
+        Err errorMessage ->
+            CheckedError name printer.extension errorMessage
 
 
 resultToBackendTask : Result String a -> BackendTask FatalError a
@@ -192,6 +191,9 @@ withScrubbers scrubbers testCase =
 
         TaskTest name ext existingScrubbers task ->
             TaskTest name ext (existingScrubbers ++ scrubbers) task
+
+        CheckedError _ _ _ ->
+            testCase
 
         Describe name tests ->
             Describe name (List.map (withScrubbers scrubbers) tests)
@@ -334,6 +336,7 @@ type Outcome
     | FailNew String
     | FailMismatch { expected : String, received : String }
     | FailFatalError FatalError
+    | FailCheckedError String
     | Approved
     | Skipped
     | TodoOutcome String
@@ -579,7 +582,7 @@ flattenTestWithStatus prefix status onlyDepth testCase =
             [ { name = prefixName prefix name
               , extension = ext
               , scrubbers = scrubbers
-              , task = BackendTask.succeed (fn ())
+              , task = Ok (BackendTask.succeed (fn ()))
               , runStatus = status
               , onlyDepth = onlyDepth
               }
@@ -589,7 +592,17 @@ flattenTestWithStatus prefix status onlyDepth testCase =
             [ { name = prefixName prefix name
               , extension = ext
               , scrubbers = scrubbers
-              , task = task
+              , task = Ok task
+              , runStatus = status
+              , onlyDepth = onlyDepth
+              }
+            ]
+
+        CheckedError name ext errorMessage ->
+            [ { name = prefixName prefix name
+              , extension = ext
+              , scrubbers = []
+              , task = Err errorMessage
               , runStatus = status
               , onlyDepth = onlyDepth
               }
@@ -634,7 +647,7 @@ flattenTestWithStatus prefix status onlyDepth testCase =
             [ { name = prefixName prefix description
               , extension = "txt"
               , scrubbers = []
-              , task = BackendTask.succeed ""
+              , task = Ok (BackendTask.succeed "")
               , runStatus = TodoTest description
               , onlyDepth = 0
               }
@@ -654,7 +667,7 @@ type alias FlatTest =
     { name : String
     , extension : String
     , scrubbers : List Scrubber
-    , task : BackendTask FatalError String
+    , task : Result String (BackendTask FatalError String)
     , runStatus : RunStatus
     , onlyDepth : Int
     }
@@ -758,7 +771,16 @@ runFlatTest scriptName options hasOnly flatTest =
                 }
 
         _ ->
-            runTestWithReceived scriptName options flatTest.name flatTest.extension flatTest.scrubbers flatTest.task
+            case flatTest.task of
+                Ok task ->
+                    runTestWithReceived scriptName options flatTest.name flatTest.extension flatTest.scrubbers task
+
+                Err errorMessage ->
+                    BackendTask.succeed
+                        { name = flatTest.name
+                        , extension = flatTest.extension
+                        , outcome = FailCheckedError errorMessage
+                        }
 
 
 runTestWithReceived : String -> CliOptions -> String -> String -> List Scrubber -> BackendTask FatalError String -> BackendTask FatalError TestResult
@@ -1029,6 +1051,33 @@ reportResultsWithObsolete scriptName options hasOnly results obsoleteSnapshots u
                                 Nothing
                     )
 
+        hasCheckedErrors =
+            List.any
+                (\result ->
+                    case result.outcome of
+                        FailCheckedError _ ->
+                            True
+
+                        _ ->
+                            False
+                )
+                failing
+
+        hasSnapshotFailures =
+            List.any
+                (\result ->
+                    case result.outcome of
+                        FailNew _ ->
+                            True
+
+                        FailMismatch _ ->
+                            True
+
+                        _ ->
+                            False
+                )
+                failing
+
         output =
             formatHumanOutput scriptName options hasOnly results obsoleteSnapshots untrackedSnapshots
     in
@@ -1062,7 +1111,12 @@ reportResultsWithObsolete scriptName options hasOnly results obsoleteSnapshots u
                             BackendTask.fail
                                 (FatalError.build
                                     { title = "Snapshot Tests Failed"
-                                    , body = "Run with --approve to accept changes, or fix the code."
+                                    , body =
+                                        if hasCheckedErrors && not hasSnapshotFailures then
+                                            "Fix the failing test(s) and re-run."
+
+                                        else
+                                            "Run with --approve to accept changes, or fix the code."
                                     }
                                 )
 
@@ -1419,6 +1473,15 @@ formatResultForPrompt result =
         FailFatalError _ ->
             "\n" ++ red "✗" ++ " " ++ result.name ++ " - fatal error\n"
 
+        FailCheckedError errorMessage ->
+            "\n"
+                ++ red "✗"
+                ++ " "
+                ++ result.name
+                ++ "\n\n"
+                ++ indentBlock errorMessage
+                ++ "\n"
+
         _ ->
             ""
 
@@ -1445,6 +1508,9 @@ isFailing result =
             True
 
         FailFatalError _ ->
+            True
+
+        FailCheckedError _ ->
             True
 
 
@@ -1503,6 +1569,14 @@ formatResult scriptName options hasOnly result =
 
         FailFatalError _ ->
             "\n" ++ red "✗" ++ " " ++ result.name ++ " - fatal error"
+
+        FailCheckedError errorMessage ->
+            "\n"
+                ++ red "✗"
+                ++ " "
+                ++ result.name
+                ++ "\n\n"
+                ++ indentBlock errorMessage
 
         Skipped ->
             if hasOnly then

@@ -49,6 +49,7 @@ Edit `snapshot-tests/src/Snapshots.elm` to add your tests.
 - **[minimal](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/minimal)** - Bare-bones setup showing the simplest possible snapshot test
 - **[log-formatter](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/log-formatter)** - Fuller example demonstrating scrubbers, test grouping with `describe`, and multiple test files
 - **[features](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/features)** - Advanced example using `Printer.elm` to snapshot complex Elm data structures
+- **[program-test](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/program-test)** - Snapshot views and model state using `elm-program-test` interactions
 
 ## About elm-pages Scripts
 
@@ -262,6 +263,56 @@ The `snapshots/` directory contains:
 - [`Snapshot`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot/) - Core API for creating and running tests
 - [`Snapshot.Printer`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot-Printer/) - Convert values to strings
 - [`Snapshot.Scrubber`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot-Scrubber/) - Clean non-deterministic output
+
+## Using with elm-program-test
+
+[`elm-program-test`](https://package.elm-lang.org/packages/avh4/elm-program-test/latest/) lets you simulate user interactions with your Elm app (clicking buttons, filling in forms, etc.). Combined with elm-snapshot, you can snapshot the rendered HTML or model state after a sequence of interactions.
+
+### Snapshot the view after interactions
+
+```elm
+import ProgramTest
+import Snapshot
+
+Snapshot.checkedTest "view after login" <|
+    \() ->
+        app
+            |> ProgramTest.fillIn "email" "Email" "alice@example.com"
+            |> ProgramTest.clickButton "Login"
+            |> ProgramTest.getViewHtml
+```
+
+### Snapshot the model
+
+```elm
+import ProgramTest
+import Snapshot
+import Snapshot.Printer as Printer
+
+Snapshot.checkedCustom (Printer.elm Debug.toString) "model after login" <|
+    \() ->
+        app
+            |> ProgramTest.clickButton "Login"
+            |> ProgramTest.getModel
+```
+
+### Transform before snapshotting
+
+You can narrow or transform the extracted value before it's snapshotted:
+
+```elm
+Snapshot.checkedTest "just the nav bar" <|
+    \() ->
+        app
+            |> ProgramTest.getViewHtml
+            |> Result.map extractNavHtml
+```
+
+### How it works
+
+`ProgramTest.getViewHtml` and `ProgramTest.getModel` return `Result String value` — `Ok` with the view HTML or model on success, or `Err` with a description of the failure if a prior interaction failed (e.g., `clickButton` couldn't find the button). This maps directly to `Snapshot.checkedTest` which expects `() -> Result String String`.
+
+If a prior interaction fails, elm-snapshot displays the full elm-program-test error message showing what went wrong (which element wasn't found, what selectors were tried, etc.).
 
 ## Inspiration
 

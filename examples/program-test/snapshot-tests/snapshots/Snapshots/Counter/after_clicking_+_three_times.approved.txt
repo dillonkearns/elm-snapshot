@@ -1,0 +1,11 @@
+<div class="counter">
+    <button>
+        --
+    </button>
+    <span>
+        3
+    </span>
+    <button>
+        ++
+    </button>
+</div>
