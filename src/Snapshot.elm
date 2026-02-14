@@ -381,7 +381,7 @@ allowing multiple snapshot scripts in the same project.
 
 Supports CLI options:
 
-  - `--approve` - Approve all new/changed snapshots
+  - `--approve=all` - Approve all new/changed snapshots
   - `--approve=prompt` - Interactive per-snapshot approval
   - `--approve-only "test name"` - Approve a specific test
   - `--ci` - Compact output for CI environments
@@ -1062,7 +1062,7 @@ reportResultsWithObsolete scriptName options hasOnly results obsoleteSnapshots u
                             BackendTask.fail
                                 (FatalError.build
                                     { title = "Snapshot Tests Failed"
-                                    , body = "Run with --approve to accept changes, or fix the code."
+                                    , body = "Run with --approve=all to accept changes, or fix the code."
                                     }
                                 )
 
@@ -1256,7 +1256,7 @@ formatHumanOutput scriptName options hasOnly results obsoleteSnapshots untracked
                     ++ " No existing snapshots found in snapshots/"
                     ++ sanitizeName scriptName
                     ++ "/\n"
-                    ++ "  - First run? Use --approve to create snapshots\n"
+                    ++ "  - First run? Use --approve=all to create snapshots\n"
                     ++ "  - Expected existing snapshots? Check your working directory"
 
             else
@@ -1478,7 +1478,7 @@ formatResult scriptName options hasOnly result =
                     ++ result.name
                     ++ "\n\n  New snapshot (no .approved file found)\n\n  Received:\n"
                     ++ indentBlock (green received)
-                    ++ "\n\n  To approve this snapshot, run with:\n    --approve"
+                    ++ "\n\n  To approve this snapshot, run with:\n    --approve=all"
                     ++ "\n\n  Or manually:\n    mv "
                     ++ snapshotPath scriptName result.name ".received" result.extension
                     ++ " \\\n       "
@@ -1495,7 +1495,7 @@ formatResult scriptName options hasOnly result =
                     ++ result.name
                     ++ "\n\n  Snapshot mismatch:\n\n"
                     ++ formatDiff expected received
-                    ++ "\n\n  To approve this change, run with:\n    --approve"
+                    ++ "\n\n  To approve this change, run with:\n    --approve=all"
                     ++ "\n\n  Or manually:\n    mv "
                     ++ snapshotPath scriptName result.name ".received" result.extension
                     ++ " \\\n       "

@@ -208,7 +208,7 @@ Snapshot.custom xmlPrinter "config xml" <|
 elm-pages run src/Snapshots.elm
 
 # Approve all new/changed snapshots
-elm-pages run src/Snapshots.elm --approve
+elm-pages run src/Snapshots.elm --approve=all
 
 # Interactive per-snapshot approval
 elm-pages run src/Snapshots.elm --approve=prompt

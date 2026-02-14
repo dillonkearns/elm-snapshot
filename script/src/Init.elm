@@ -92,7 +92,7 @@ snapshotTestsPackageJson =
   "private": true,
   "scripts": {
     "test": "elm-pages run src/Snapshots.elm",
-    "test:approve": "elm-pages run src/Snapshots.elm --approve"
+    "test:approve": "elm-pages run src/Snapshots.elm --approve=all"
   },
   "devDependencies": {
     "elm-pages": "^10.2.2"

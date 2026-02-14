@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example: [minimal, log-formatter, features]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - id: cache-node_modules
+        uses: actions/cache@v4
+        with:
+          path: examples/${{ matrix.example }}/node_modules
+          key: node_modules-${{ matrix.example }}-${{ hashFiles(format('examples/{0}/package.json', matrix.example), format('examples/{0}/package-lock.json', matrix.example)) }}
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: elm-${{ matrix.example }}-${{ hashFiles(format('examples/{0}/elm-tooling.json', matrix.example), format('examples/{0}/snapshot-tests/elm.json', matrix.example)) }}
+
+      - if: steps.cache-node_modules.outputs.cache-hit != 'true'
+        env:
+          NO_ELM_TOOLING_INSTALL: 1
+        run: npm ci
+        working-directory: examples/${{ matrix.example }}
+
+      - run: npx elm-tooling install
+        working-directory: examples/${{ matrix.example }}
+
+      - run: npm test -- --ci
+        working-directory: examples/${{ matrix.example }}
