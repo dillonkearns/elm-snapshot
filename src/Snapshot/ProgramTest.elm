@@ -175,9 +175,11 @@ getScopedViewHtml marker selectors programTest =
 getModelResult : (model -> String) -> ProgramTest model msg effect -> Result String String
 getModelResult debugToString programTest =
     let
+        marker : String
         marker =
             "elm-snapshot-model-extract:"
 
+        expectation : Expect.Expectation
         expectation =
             programTest
                 |> ProgramTest.expectModel
@@ -243,7 +245,7 @@ The format is:
                 content
             </span>
 
-The first line has "    N)  " prefix (4 spaces + number + ")  ").
+The first line has " N) " prefix (4 spaces + number + ") ").
 Subsequent lines are indented by 8 spaces.
 
 -}
