@@ -12,8 +12,8 @@ module Snapshot.ProgramTest exposing (view, model)
     import Snapshot.ProgramTest
     import Test.Html.Selector as Selector
 
-    counterApp : ProgramTest { count : Int } () ()
-    counterApp =
+    startCounterApp : ProgramTest { count : Int } () ()
+    startCounterApp =
         ProgramTest.createSandbox
             { init = { count = 0 }
             , update = \() model -> { model | count = model.count + 1 }
@@ -29,11 +29,16 @@ module Snapshot.ProgramTest exposing (view, model)
     run : Script
     run =
         Snapshot.run "Snapshots"
-            [ Snapshot.ProgramTest.view [] "initial view" counterApp
-            , Snapshot.ProgramTest.view [ Selector.tag "span" ] "counter display"
-                (counterApp |> ProgramTest.clickButton "++")
-            , Snapshot.ProgramTest.model Debug.toString "model after click"
-                (counterApp |> ProgramTest.clickButton "++")
+            [ Snapshot.ProgramTest.view [] "initial view" <|
+                \() -> startCounterApp
+            , Snapshot.ProgramTest.view [ Selector.tag "span" ] "counter display" <|
+                \() ->
+                    startCounterApp
+                        |> ProgramTest.clickButton "++"
+            , Snapshot.ProgramTest.model Debug.toString "model after click" <|
+                \() ->
+                    startCounterApp
+                        |> ProgramTest.clickButton "++"
             ]
 
 After running `elm-pages run src/Snapshots.elm --approve=all`, you will have these files on disk:
@@ -77,16 +82,20 @@ import Test.Runner
 The first argument is a list of selectors to scope the snapshot to a
 subtree of the view. Pass an empty list to snapshot the entire view.
 
-    Snapshot.ProgramTest.view [] "full view" myProgram
+    Snapshot.ProgramTest.view [] "full view" <|
+        \() -> myProgram
 
-    Snapshot.ProgramTest.view [ Selector.tag "span" ] "counter display" myProgram
+    Snapshot.ProgramTest.view [ Selector.tag "span" ] "counter display" <|
+        \() ->
+            myProgram
+                |> ProgramTest.clickButton "++"
 
 -}
-view : List Selector.Selector -> String -> ProgramTest model msg effect -> Snapshot.Test
-view selectors name programTest =
+view : List Selector.Selector -> String -> (() -> ProgramTest model msg effect) -> Snapshot.Test
+view selectors name thunk =
     Snapshot.checkedCustom (Printer.string |> Printer.withExtension "html") name <|
         \() ->
-            getViewHtml selectors programTest
+            getViewHtml selectors (thunk ())
 
 
 {-| Create a snapshot test of the model from a `ProgramTest`.
@@ -97,15 +106,17 @@ producing `.elm` snapshot files with proper syntax highlighting.
 The first argument must be `Debug.toString` (published packages cannot
 call it directly, so you must pass it in).
 
-    Snapshot.ProgramTest.model Debug.toString "model state"
-        (myProgram |> ProgramTest.clickButton "++")
+    Snapshot.ProgramTest.model Debug.toString "model state" <|
+        \() ->
+            myProgram
+                |> ProgramTest.clickButton "++"
 
 -}
-model : (a -> String) -> String -> ProgramTest a msg effect -> Snapshot.Test
-model debugToString name programTest =
+model : (a -> String) -> String -> (() -> ProgramTest a msg effect) -> Snapshot.Test
+model debugToString name thunk =
     Snapshot.checkedCustom (Printer.elm identity) name <|
         \() ->
-            getModelResult debugToString programTest
+            getModelResult debugToString (thunk ())
 
 
 getViewHtml : List Selector.Selector -> ProgramTest model msg effect -> Result String String

@@ -12,24 +12,29 @@ run : Script
 run =
     Snapshot.run "Snapshots"
         [ Snapshot.describe "Counter App"
-            [ Snapshot.ProgramTest.view [] "initial view" counterApp
-            , Snapshot.ProgramTest.view [] "view after increment"
-                (counterApp |> ProgramTest.clickButton "++")
-            , Snapshot.ProgramTest.view [ Selector.tag "span" ] "just the counter"
-                (counterApp |> ProgramTest.clickButton "++")
-            , Snapshot.ProgramTest.model Debug.toString "model after two increments"
-                (counterApp
-                    |> ProgramTest.clickButton "++"
-                    |> ProgramTest.clickButton "++"
-                    |> ProgramTest.clickButton "++"
-                    |> ProgramTest.clickButton "++"
-                )
+            [ Snapshot.ProgramTest.view [] "initial view" <|
+                \() -> startCounterApp
+            , Snapshot.ProgramTest.view [] "view after increment" <|
+                \() ->
+                    startCounterApp
+                        |> ProgramTest.clickButton "++"
+            , Snapshot.ProgramTest.view [ Selector.tag "span" ] "just the counter" <|
+                \() ->
+                    startCounterApp
+                        |> ProgramTest.clickButton "++"
+            , Snapshot.ProgramTest.model Debug.toString "model after two increments" <|
+                \() ->
+                    startCounterApp
+                        |> ProgramTest.clickButton "++"
+                        |> ProgramTest.clickButton "++"
+                        |> ProgramTest.clickButton "++"
+                        |> ProgramTest.clickButton "++"
             ]
         ]
 
 
-counterApp : ProgramTest CounterApp.Model CounterApp.Msg ()
-counterApp =
+startCounterApp : ProgramTest CounterApp.Model CounterApp.Msg ()
+startCounterApp =
     ProgramTest.createSandbox
         { init = CounterApp.init
         , update = CounterApp.update
