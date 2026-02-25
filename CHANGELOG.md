@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.1.0]
+
+### Added
+
+- **`Snapshot.ProgramTest` module** - Snapshot test views and models from [`elm-program-test`](https://package.elm-lang.org/packages/avh4/elm-program-test/latest/) programs
+  - `view` - Snapshot rendered view HTML, with optional selector scoping
+  - `model` - Snapshot model state as pretty-printed Elm syntax
+- New dependencies: `avh4/elm-program-test` 4.0.0, `elm-explorations/test` 2.0.0
+
 ## [1.0.0] - 2026-01-31
 
 Initial release of elm-snapshot, a snapshot testing framework for Elm.

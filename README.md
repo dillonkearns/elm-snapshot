@@ -49,6 +49,7 @@ Edit `snapshot-tests/src/Snapshots.elm` to add your tests.
 - **[minimal](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/minimal)** - Bare-bones setup showing the simplest possible snapshot test
 - **[log-formatter](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/log-formatter)** - Fuller example demonstrating scrubbers, test grouping with `describe`, and multiple test files
 - **[features](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/features)** - Advanced example using `Printer.elm` to snapshot complex Elm data structures
+- **[program-test](https://github.com/dillonkearns/elm-snapshot/tree/main/examples/program-test)** - Snapshot testing `ProgramTest` programs with view and model snapshots
 
 ## About elm-pages Scripts
 
@@ -261,6 +262,7 @@ The `snapshots/` directory contains:
 
 - [`Snapshot`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot/) - Core API for creating and running tests
 - [`Snapshot.Printer`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot-Printer/) - Convert values to strings
+- [`Snapshot.ProgramTest`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot-ProgramTest/) - Snapshot view HTML and model from `ProgramTest` programs
 - [`Snapshot.Scrubber`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.0.0/Snapshot-Scrubber/) - Clean non-deterministic output
 
 ## Inspiration
