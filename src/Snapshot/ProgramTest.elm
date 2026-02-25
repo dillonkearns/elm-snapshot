@@ -45,24 +45,18 @@ After running `elm-pages run src/Snapshots.elm --approve=all`, you will have the
 
 `initial_view.approved.html`:
 
-```html
-<div>
-    <button>++</button>
-    <span>0</span>
-</div>
-```
+    <div>
+        <button>++</button>
+        <span>0</span>
+    </div>
 
 `counter_display.approved.html`:
 
-```html
-<span>1</span>
-```
+    <span>1</span>
 
 `model_after_click.approved.elm`:
 
-```html
-{ count = 1 }
-```
+    { count = 1 }
 
 @docs view, model
 
