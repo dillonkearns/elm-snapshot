@@ -42,7 +42,7 @@ with that signature works as a scrubber:
 
 -}
 
-import Dict exposing (Dict)
+import Dict
 import Regex
 
 
