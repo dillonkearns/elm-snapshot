@@ -1,6 +1,7 @@
 {
   "license": "BSD-3-Clause",
   "devDependencies": {
+    "elm": "^0.19.1-6",
     "elm-format": "^0.8.8",
     "elm-review": "^2.13.5",
     "lamdera": "^0.19.1-1.4.0"
