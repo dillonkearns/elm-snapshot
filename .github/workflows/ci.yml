@@ -9,12 +9,12 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.elm
           key: elm-lint-${{ hashFiles('review/elm.json') }}
@@ -33,18 +33,18 @@ jobs:
       matrix:
         example: [minimal, log-formatter, features, program-test]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 22
 
       - id: cache-node_modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: examples/${{ matrix.example }}/node_modules
           key: node_modules-${{ matrix.example }}-${{ hashFiles(format('examples/{0}/package.json', matrix.example), format('examples/{0}/package-lock.json', matrix.example)) }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.elm
           key: elm-${{ matrix.example }}-${{ hashFiles(format('examples/{0}/snapshot-tests/elm.json', matrix.example)) }}
@@ -55,3 +55,12 @@ jobs:
 
       - run: npm test -- --ci
         working-directory: examples/${{ matrix.example }}
+
+  publish:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: dillonkearns/elm-publish-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
