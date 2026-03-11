@@ -65,6 +65,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci
+      - run: echo "$PWD/node_modules/.bin" >> $GITHUB_PATH
       - uses: dillonkearns/elm-publish-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
