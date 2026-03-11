@@ -8,6 +8,7 @@
   },
   "devDependencies": {
     "elm-pages": "^3.0.28",
-    "elm-tooling": "^1.15.1"
+    "elm-tooling": "^1.15.1",
+    "lamdera": "^0.19.1-1.4.0"
   }
 }
