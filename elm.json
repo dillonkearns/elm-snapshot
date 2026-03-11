@@ -13,8 +13,8 @@
     "elm-version": "0.19.1 <= v < 0.20.0",
     "dependencies": {
         "avh4/elm-program-test": "4.0.0 <= v < 4.1.0",
-        "dillonkearns/elm-cli-options-parser": "3.0.0 <= v < 4.0.0",
-        "dillonkearns/elm-pages": "10.3.0 <= v < 11.0.0",
+        "dillonkearns/elm-cli-options-parser": "4.0.0 <= v < 5.0.0",
+        "dillonkearns/elm-pages": "12.0.2 <= v < 13.0.0",
         "elm/core": "1.0.0 <= v < 2.0.0",
         "elm/json": "1.0.0 <= v < 2.0.0",
         "elm/regex": "1.0.0 <= v < 2.0.0",
