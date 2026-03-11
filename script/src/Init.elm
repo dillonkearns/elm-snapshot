@@ -95,7 +95,7 @@ snapshotTestsPackageJson =
     "test:approve": "elm-pages run src/Snapshots.elm --approve=all"
   },
   "devDependencies": {
-    "elm-pages": "^10.2.2"
+    "elm-pages": "^3.2.0"
   }
 }
 """
