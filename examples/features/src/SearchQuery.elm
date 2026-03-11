@@ -1,16 +1,16 @@
 module SearchQuery exposing
-    ( Query
-    , Field(..)
+    ( Field(..)
     , Operator(..)
+    , Query
     , SortDirection(..)
-    , empty
-    , where_
     , and
-    , or
-    , sortBy
+    , empty
     , limit
     , offset
+    , or
     , select
+    , sortBy
+    , where_
     )
 
 {-| A fluent query builder for constructing search queries.

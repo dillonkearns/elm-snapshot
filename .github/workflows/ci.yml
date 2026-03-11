@@ -6,6 +6,27 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.elm
+          key: elm-lint-${{ hashFiles('review/elm.json') }}
+
+      - run: npm ci
+
+      - name: elm-format validate
+        run: npx elm-format --validate src/ review/ script/ examples/minimal/src/ examples/minimal/snapshot-tests/src/ examples/features/src/ examples/features/snapshot-tests/src/ examples/log-formatter/src/ examples/log-formatter/snapshot-tests/src/ examples/program-test/src/ examples/program-test/snapshot-tests/src/
+
+      - name: elm-review
+        run: npx elm-review
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -26,15 +47,10 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.elm
-          key: elm-${{ matrix.example }}-${{ hashFiles(format('examples/{0}/elm-tooling.json', matrix.example), format('examples/{0}/snapshot-tests/elm.json', matrix.example)) }}
+          key: elm-${{ matrix.example }}-${{ hashFiles(format('examples/{0}/snapshot-tests/elm.json', matrix.example)) }}
 
       - if: steps.cache-node_modules.outputs.cache-hit != 'true'
-        env:
-          NO_ELM_TOOLING_INSTALL: 1
         run: npm ci
-        working-directory: examples/${{ matrix.example }}
-
-      - run: npx elm-tooling install
         working-directory: examples/${{ matrix.example }}
 
       - run: npm test -- --ci

@@ -2,14 +2,13 @@
   "name": "program-test-example",
   "private": true,
   "scripts": {
-    "prepare": "elm-tooling install",
     "test": "cd snapshot-tests && elm-pages run src/Snapshots.elm",
     "test:approve": "cd snapshot-tests && elm-pages run src/Snapshots.elm --approve=all",
     "test:list": "cd snapshot-tests && elm-pages run src/Snapshots.elm --list"
   },
   "devDependencies": {
+    "elm": "^0.19.1-6",
     "elm-pages": "^3.0.28",
-    "elm-tooling": "^1.15.1",
     "lamdera": "^0.19.1-1.4.0"
   }
 }

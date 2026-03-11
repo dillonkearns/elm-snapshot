@@ -2,13 +2,13 @@ module ShoppingCart exposing
     ( Cart
     , CartItem
     , DiscountType(..)
-    , empty
     , addItem
+    , applyDiscount
+    , checkout
+    , clearDiscount
+    , empty
     , removeItem
     , updateQuantity
-    , applyDiscount
-    , clearDiscount
-    , checkout
     )
 
 {-| A shopping cart state machine.
