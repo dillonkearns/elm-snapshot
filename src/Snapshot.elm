@@ -715,7 +715,7 @@ program =
                 |> OptionsParser.with (Option.flag "list")
                 |> OptionsParser.with (Option.flag "prune")
                 |> OptionsParser.with (Option.optionalKeywordArg "reporter")
-                |> OptionsParser.withDoc "Run snapshot tests"
+                |> OptionsParser.withDescription "Run snapshot tests"
             )
 
 
