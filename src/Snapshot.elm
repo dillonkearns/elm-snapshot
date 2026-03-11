@@ -38,7 +38,7 @@ import Diff exposing (Change(..))
 import FatalError exposing (FatalError)
 import Json.Encode as Encode
 import Pages.Script as Script exposing (Script)
-import Set exposing (Set)
+import Set
 import Snapshot.Printer as Printer exposing (Printer)
 import Snapshot.Scrubber exposing (Scrubber)
 

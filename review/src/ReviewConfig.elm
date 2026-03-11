@@ -23,7 +23,6 @@ import NoInconsistentAliases
 import NoMissingTypeAnnotation
 import NoModuleOnExposedNames
 import NoUnused.CustomTypeConstructorArgs
-import Simplify
 import NoUnused.CustomTypeConstructors
 import NoUnused.Dependencies
 import NoUnused.Exports
@@ -32,6 +31,7 @@ import NoUnused.Parameters
 import NoUnused.Patterns
 import NoUnused.Variables
 import Review.Rule exposing (Rule)
+import Simplify
 
 
 config : List Rule
@@ -40,27 +40,36 @@ config =
     , NoUnused.Exports.rule
     , NoUnused.Dependencies.rule
     , NoUnused.CustomTypeConstructorArgs.rule
-
-    --, NoUnused.Variables.rule
-    -- , NoUnused.CustomTypeConstructors.rule []
+    , NoUnused.Variables.rule
+    , NoUnused.CustomTypeConstructors.rule []
     , NoUnused.Parameters.rule
-
-    --, NoUnused.Patterns.rule
+    , NoUnused.Patterns.rule
     , NoDebug.Log.rule
     , NoDebug.TodoOrToString.rule
         |> Review.Rule.ignoreErrorsForDirectories [ "tests" ]
     , NoExposingEverything.rule
-
-    --, NoImportingEverything.rule []
+    , NoImportingEverything.rule []
     , NoMissingTypeAnnotation.rule
-
-    --, NoInconsistentAliases.config
-    --    [ ( "Html.Attributes", "Attr" )
-    --    , ( "Json.Decode", "Decode" )
-    --    , ( "Json.Encode", "Encode" )
-    --    ]
-    --    |> NoInconsistentAliases.noMissingAliases
-    --    |> NoInconsistentAliases.rule
+    , NoInconsistentAliases.config
+        [ ( "BackendTask.File", "File" )
+        , ( "BackendTask.Glob", "Glob" )
+        , ( "BackendTask.Stream", "Stream" )
+        , ( "Cli.Option", "Option" )
+        , ( "Cli.OptionsParser", "OptionsParser" )
+        , ( "Cli.Program", "Program" )
+        , ( "DebugParser.ElmValue", "ElmValue" )
+        , ( "Json.Decode", "Decode" )
+        , ( "Json.Encode", "Encode" )
+        , ( "Pages.Script", "Script" )
+        , ( "Snapshot.Printer", "Printer" )
+        , ( "Snapshot.Scrubber", "Scrubber" )
+        , ( "Snapshots.Api", "Api" )
+        , ( "Snapshots.Auth", "Auth" )
+        , ( "Test.Html.Query", "Query" )
+        , ( "Test.Html.Selector", "Selector" )
+        ]
+        |> NoInconsistentAliases.noMissingAliases
+        |> NoInconsistentAliases.rule
     , NoModuleOnExposedNames.rule
     , Docs.NoMissing.rule
         { document = onlyExposed
