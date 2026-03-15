@@ -260,10 +260,10 @@ The `snapshots/` directory contains:
 
 ## Modules
 
-- [`Snapshot`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.0/Snapshot/) - Core API for creating and running tests
-- [`Snapshot.Printer`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.0/Snapshot-Printer/) - Convert values to strings
-- [`Snapshot.ProgramTest`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.0/Snapshot-ProgramTest/) - Snapshot view HTML and model from `ProgramTest` programs
-- [`Snapshot.Scrubber`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.0/Snapshot-Scrubber/) - Clean non-deterministic output
+- [`Snapshot`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.1/Snapshot/) - Core API for creating and running tests
+- [`Snapshot.Printer`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.1/Snapshot-Printer/) - Convert values to strings
+- [`Snapshot.ProgramTest`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.1/Snapshot-ProgramTest/) - Snapshot view HTML and model from `ProgramTest` programs
+- [`Snapshot.Scrubber`](https://package.elm-lang.org/packages/dillonkearns/elm-snapshot/1.1.1/Snapshot-Scrubber/) - Clean non-deterministic output
 
 ## Inspiration
 
