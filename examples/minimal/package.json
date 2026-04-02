@@ -7,7 +7,7 @@
   },
   "devDependencies": {
     "elm": "^0.19.1-6",
-    "elm-pages": "^3.0.28",
+    "elm-pages": "^3.3.4",
     "lamdera": "^0.19.1-1.4.0"
   }
 }
