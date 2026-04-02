@@ -226,6 +226,9 @@ elm-pages run src/Snapshots.elm --list
 # Remove obsolete snapshots
 elm-pages run src/Snapshots.elm --prune
 
+# Coverage report (requires elm-instrument: npm install -g elm-coverage)
+elm-pages run --coverage src/Snapshots.elm
+
 # Open diff tool for failures
 elm-pages run src/Snapshots.elm --reporter=code      # VS Code
 elm-pages run src/Snapshots.elm --reporter=opendiff  # macOS FileMerge
@@ -233,6 +236,55 @@ elm-pages run src/Snapshots.elm --reporter=meld      # Meld
 elm-pages run src/Snapshots.elm --reporter=ksdiff    # Kaleidoscope
 elm-pages run src/Snapshots.elm --reporter=kdiff3    # KDiff3
 elm-pages run src/Snapshots.elm --reporter=diff      # Unix diff
+```
+
+## Coverage
+
+You can generate a coverage report to see which parts of your code are exercised by your snapshot tests.
+
+**Prerequisite:** Install `elm-instrument` globally:
+
+```bash
+npm install -g elm-coverage
+```
+
+Then run with `--coverage` (note: coverage flags go **before** the script path):
+
+```bash
+elm-pages run --coverage src/Snapshots.elm
+```
+
+This instruments your source files, runs the tests, and prints a summary:
+
+```
+4 passing, 0 failing
+
+── Coverage Report ──────────────────────────────────────
+
+  Module       Covered   Total   Coverage
+  ──────────────────────────────────────
+  CounterApp         4       5      80.0%
+  ──────────────────────────────────────
+  TOTAL              4       5      80.0%
+
+  Coverage report written to coverage/lcov.info
+```
+
+The output is standard LCOV format, so you can generate an HTML report with `genhtml` if you install `lcov`:
+
+```bash
+genhtml coverage/lcov.info --output-directory coverage/html
+open coverage/html/index.html
+```
+
+You can also filter which modules appear in the report:
+
+```bash
+# Only show specific modules
+elm-pages run --coverage --coverage-include-module 'MyApp.*' src/Snapshots.elm
+
+# Exclude modules from the report
+elm-pages run --coverage --coverage-exclude-module 'Gen.*' src/Snapshots.elm
 ```
 
 ## File Structure
